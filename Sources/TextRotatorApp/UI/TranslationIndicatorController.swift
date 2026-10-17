@@ -2,7 +2,14 @@ import Foundation
 import AppKit
 import SwiftUI
 
-/// Ultra-lightweight non-activating circular HUD panel displayed near cursor during F1 in-place translation.
+public enum IndicatorState: Sendable, Equatable {
+    case spinning
+    case checkmark
+    case cross
+}
+
+/// Ultra-lightweight non-activating circular HUD panel displayed near cursor during F1 in-place translation
+/// or on/off feedback for cursor translate mode.
 @MainActor
 public final class TranslationIndicatorController: NSObject {
     private let panel: NSPanel
@@ -25,13 +32,21 @@ public final class TranslationIndicatorController: NSObject {
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
 
-        let hostingView = NSHostingView(rootView: IndicatorContentView())
+        let hostingView = NSHostingView(rootView: IndicatorContentView(state: .spinning))
         hostingView.frame = NSRect(x: 0, y: 0, width: 34, height: 34)
         panel.contentView = hostingView
         panel.setContentSize(NSSize(width: 34, height: 34))
     }
 
-    public func showNearCursor(offset: NSPoint = NSPoint(x: 14, y: -18)) {
+    public func showNearCursor(
+        state: IndicatorState = .spinning,
+        offset: NSPoint = NSPoint(x: 14, y: -18),
+        autoDismissDelay: Double? = nil
+    ) {
+        let hostingView = NSHostingView(rootView: IndicatorContentView(state: state))
+        hostingView.frame = NSRect(x: 0, y: 0, width: 34, height: 34)
+        panel.contentView = hostingView
+
         let mouseLocation = NSEvent.mouseLocation
         let targetScreen = NSScreen.screens.first { screen in
             NSMouseInRect(mouseLocation, screen.frame, false)
@@ -58,6 +73,13 @@ public final class TranslationIndicatorController: NSObject {
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1.0
         }
+
+        if let delay = autoDismissDelay {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                self.dismiss()
+            }
+        }
     }
 
     public func dismiss() {
@@ -80,6 +102,7 @@ public final class TranslationIndicatorController: NSObject {
 // MARK: - SwiftUI Indicator View
 
 private struct IndicatorContentView: View {
+    let state: IndicatorState
     @State private var isSpinning: Bool = false
     @Environment(\.colorScheme) private var colorScheme
 
@@ -99,30 +122,42 @@ private struct IndicatorContentView: View {
                         )
                 )
 
-            // Spinning Accent Arc
-            Circle()
-                .trim(from: 0.15, to: 0.85)
-                .stroke(
-                    AngularGradient(
-                        colors: [
-                            Color.accentColor.opacity(0.2),
-                            Color.accentColor
-                        ],
-                        center: .center
-                    ),
-                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
-                )
-                .frame(width: 20, height: 20)
-                .rotationEffect(.degrees(isSpinning ? 360 : 0))
-                .animation(
-                    Animation.linear(duration: 0.75)
-                        .repeatForever(autoreverses: false),
-                    value: isSpinning
-                )
+            switch state {
+            case .spinning:
+                Circle()
+                    .trim(from: 0.15, to: 0.85)
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                Color.accentColor.opacity(0.2),
+                                Color.accentColor
+                            ],
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                    )
+                    .frame(width: 20, height: 20)
+                    .rotationEffect(.degrees(isSpinning ? 360 : 0))
+                    .animation(
+                        Animation.linear(duration: 0.75)
+                            .repeatForever(autoreverses: false),
+                        value: isSpinning
+                    )
+                    .onAppear {
+                        isSpinning = true
+                    }
+
+            case .checkmark:
+                Image(systemName: "checkmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.green)
+
+            case .cross:
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.red)
+            }
         }
         .frame(width: 34, height: 34)
-        .onAppear {
-            isSpinning = true
-        }
     }
 }

@@ -16,72 +16,28 @@ public struct SettingsSheetView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack(spacing: 8) {
-                Image(systemName: "gearshape.fill")
-                    .foregroundColor(.accentColor)
-                    .font(.system(size: 15))
-
-                Text("Настройки")
-                    .font(.system(size: 15, weight: .bold))
-
-                Spacer()
-
-                Button {
-                    isPresented = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 14))
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.cancelAction)
-                .help("Закрыть настройки (Escape)")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                accessibilitySection
+                hotkeysSection
+                translationSection
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .background(Color(NSColor.windowBackgroundColor))
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Section 1: Accessibility
-                    accessibilitySection
-
-                    // Section 2: Hotkeys
-                    hotkeysSection
-
-                    // Section 3: Translation Provider
-                    translationSection
-                }
-                .padding(20)
-            }
-
-            Divider()
-
-            // Footer
-            HStack {
-                Spacer()
-                Button("Готово") {
-                    stopRecording()
-                    isPresented = false
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .keyboardShortcut(.defaultAction)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(Color(NSColor.windowBackgroundColor).opacity(0.6))
+            .padding(24)
         }
-        .frame(width: 540, height: 480)
+        .frame(width: 520, height: 420)
         .onAppear {
             refreshAccessibility()
         }
         .onDisappear {
             stopRecording()
+        }
+        .onKeyPress { keyPress in
+            if keyPress.key == .escape {
+                stopRecording()
+                isPresented = false
+                return .handled
+            }
+            return .ignored
         }
     }
 

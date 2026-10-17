@@ -271,8 +271,16 @@ public final class AppCoordinator: ObservableObject {
         }
     }
 
-    public func toggleCursorTranslateMode() {
+    public func toggleCursorTranslateMode(showFeedback: Bool = true) {
         isCursorTranslateEnabled.toggle()
+        if showFeedback {
+            translationIndicator.showNearCursor(
+                state: isCursorTranslateEnabled ? .checkmark : .cross,
+                autoDismissDelay: 0.85
+            )
+            AppTheme.hapticSuccess()
+        }
+
         if isCursorTranslateEnabled {
             if cursorWatcher == nil {
                 cursorWatcher = CursorSelectionWatcher(textIO: textIO) { [weak self] selectedText in

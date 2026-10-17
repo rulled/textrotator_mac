@@ -65,12 +65,10 @@ public struct QuickSnippetsView: View {
                 Button {
                     navState.backToFolders()
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("Папки")
-                            .font(.system(size: 12, weight: .medium))
-                    }
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3.5)
                 }
                 .glassButton()
                 .accessibilityLabel("Назад к списку папок")
@@ -81,8 +79,6 @@ public struct QuickSnippetsView: View {
                     .foregroundColor(.primary)
 
                 Spacer()
-
-                closeButton
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
@@ -111,7 +107,7 @@ public struct QuickSnippetsView: View {
                     .accessibilityLabel("Очистить поиск")
                 }
 
-                closeButton
+
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
@@ -119,22 +115,6 @@ public struct QuickSnippetsView: View {
         }
     }
 
-    private var closeButton: some View {
-        Button {
-            coordinator.quickSnippetsPanel?.close()
-        } label: {
-            Text("esc")
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(Color.secondary.opacity(0.15))
-                .cornerRadius(AppTheme.badgeRadius)
-                .foregroundColor(.secondary)
-        }
-        .buttonStyle(.plain)
-        .help("Закрыть (Escape)")
-        .accessibilityLabel("Закрыть")
-    }
 
     // MARK: - Level 1: Folders List
 

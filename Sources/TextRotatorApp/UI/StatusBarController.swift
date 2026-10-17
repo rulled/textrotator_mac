@@ -44,8 +44,9 @@ public final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(NSMenuItem.separator())
 
         // 2. Cursor Translate Toggle
+        let hotkey = coordinator.currentKeyCombo(for: .cursorTranslateToggle).displayString
         let cursorTranslateItem = NSMenuItem(
-            title: "Автоперевод при выделении (F2)",
+            title: "Автоперевод при выделении (\(hotkey))",
             action: #selector(toggleCursorTranslate),
             keyEquivalent: ""
         )
