@@ -69,7 +69,7 @@ public struct SnippetsManagerView: View {
                 folderPendingDeletion = nil
             }
         } message: {
-            Text("Все сниппеты в этой папке будут безвозвратно удалены.")
+            Text("Все тексты в этой папке будут безвозвратно удалены.")
         }
     }
 
@@ -130,9 +130,9 @@ public struct SnippetsManagerView: View {
                         Image(systemName: "plus")
                             .font(.system(size: 13, weight: .semibold))
                     }
-                    .help("Добавить сниппет (Cmd+N)")
+                    .help("Добавить текст (Cmd+N)")
                     .keyboardShortcut("n", modifiers: .command)
-                    .accessibilityLabel("Добавить новый сниппет")
+                    .accessibilityLabel("Добавить новый текст")
                 }
             }
         } else {
@@ -151,11 +151,11 @@ public struct SnippetsManagerView: View {
     private func snippetsListContainer(folder: FolderWithSnippets) -> some View {
         if folder.snippets.isEmpty && !isAddingSnippet {
             ContentUnavailableView {
-                Label("В этой папке пока нет сниппетов", systemImage: "doc.text")
+                Label("В этой папке пока нет текстов", systemImage: "doc.text")
             } description: {
-                Text("Создайте первый сниппет для быстрого доступа по хоткею.")
+                Text("Создайте первый текст для быстрого доступа по хоткею.")
             } actions: {
-                Button("Создать сниппет") {
+                Button("Создать текст") {
                     withAnimation(AppTheme.springFast) {
                         isAddingSnippet = true
                         newSnippetContent = ""
@@ -331,19 +331,16 @@ public struct SnippetsManagerView: View {
                 isFolderRenameFocused = true
             }
         } else {
-            NavigationLink(value: folder.id) {
-                Label(folder.name, systemImage: "folder")
-                    .font(.system(size: 13))
-            }
-            .contextMenu {
-                Button("Переименовать...") {
+            FolderSidebarRowContent(
+                folder: folder,
+                isSelected: selectedFolderId == folder.id,
+                onRename: {
                     startRenamingFolder(folder)
-                }
-                Divider()
-                Button("Удалить папку...", role: .destructive) {
+                },
+                onDelete: {
                     folderPendingDeletion = folder
                 }
-            }
+            )
         }
     }
 
@@ -352,7 +349,7 @@ public struct SnippetsManagerView: View {
     private func inlineNewSnippetCard(folderId: Int64) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Новый сниппет")
+                Text("Новый текст")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.accentColor)
                 Spacer()
@@ -404,7 +401,7 @@ public struct SnippetsManagerView: View {
     private func inlineSnippetEditor(snippet: SnippetItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("Редактирование сниппета", systemImage: "pencil")
+                Label("Редактирование текста", systemImage: "pencil")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.accentColor)
                 Spacer()
@@ -612,37 +609,51 @@ private struct SnippetDetailRow: View {
     let onDelete: () -> Void
 
     @State private var isHovered: Bool = false
+    @State private var isPencilHovered: Bool = false
+    @State private var isTrashHovered: Bool = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "quote.bubble")
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundColor(.secondary)
-                .padding(.top, 2)
+                .padding(.top, 3)
 
             Text(snippet.content)
                 .font(.system(size: 13))
                 .lineLimit(4)
+                .lineSpacing(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Actions: Edit and Delete only (Copy button removed)
-            HStack(spacing: 6) {
+            // Actions: Edit and Delete with comfortable 26x26 hit target and Apple-design feedback
+            HStack(spacing: 4) {
                 Button(action: onEdit) {
                     Image(systemName: "pencil")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundColor(isPencilHovered ? .primary : .secondary)
+                        .frame(width: 26, height: 26)
+                        .background(isPencilHovered ? Color.secondary.opacity(0.14) : Color.clear)
+                        .cornerRadius(6)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .onHover { isPencilHovered = $0 }
                 .help("Редактировать текст на месте")
-                .accessibilityLabel("Редактировать сниппет")
+                .accessibilityLabel("Редактировать текст")
 
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
-                        .font(.system(size: 11))
-                        .foregroundColor(.red)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundColor(isTrashHovered ? .red : .red.opacity(0.85))
+                        .frame(width: 26, height: 26)
+                        .background(isTrashHovered ? Color.red.opacity(0.14) : Color.clear)
+                        .cornerRadius(6)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
-                .help("Удалить сниппет")
-                .accessibilityLabel("Удалить сниппет")
+                .buttonStyle(.plain)
+                .onHover { isTrashHovered = $0 }
+                .help("Удалить текст")
+                .accessibilityLabel("Удалить текст")
             }
             .opacity(isHovered ? 1.0 : 0.4)
             .animation(AppTheme.springFast, value: isHovered)
@@ -652,5 +663,70 @@ private struct SnippetDetailRow: View {
             isHovered = hovering
         }
         .help(snippet.content)
+    }
+}
+
+// MARK: - Folder Sidebar Row Content (with hover buttons)
+
+private struct FolderSidebarRowContent: View {
+    let folder: FolderWithSnippets
+    let isSelected: Bool
+    let onRename: () -> Void
+    let onDelete: () -> Void
+
+    @State private var isHovered: Bool = false
+    @State private var isPencilHovered: Bool = false
+    @State private var isTrashHovered: Bool = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            NavigationLink(value: folder.id) {
+                Label(folder.name, systemImage: "folder")
+                    .font(.system(size: 13))
+            }
+
+            Spacer()
+
+            if isHovered || isSelected {
+                HStack(spacing: 2) {
+                    Button(action: onRename) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundColor(isPencilHovered ? .primary : .secondary)
+                            .frame(width: 22, height: 22)
+                            .background(isPencilHovered ? Color.secondary.opacity(0.14) : Color.clear)
+                            .cornerRadius(5)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { isPencilHovered = $0 }
+                    .help("Переименовать папку")
+
+                    Button(role: .destructive, action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundColor(isTrashHovered ? .red : .red.opacity(0.85))
+                            .frame(width: 22, height: 22)
+                            .background(isTrashHovered ? Color.red.opacity(0.14) : Color.clear)
+                            .cornerRadius(5)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { isTrashHovered = $0 }
+                    .help("Удалить папку...")
+                }
+                .transition(.opacity)
+            }
+        }
+        .onHover { isHovered = $0 }
+        .contextMenu {
+            Button("Переименовать...") {
+                onRename()
+            }
+            Divider()
+            Button("Удалить папку...", role: .destructive) {
+                onDelete()
+            }
+        }
     }
 }

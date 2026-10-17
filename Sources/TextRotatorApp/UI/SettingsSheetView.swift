@@ -86,7 +86,7 @@ public struct SettingsSheetView: View {
 
     private var accessibilityDescriptionText: String {
         if isAccessibilityGranted {
-            return "Text Rotator может напрямую захватывать выделенный текст и вставлять сниппеты в любое приложение без буфера обмена."
+            return "Text Rotator может напрямую захватывать выделенный текст и вставлять тексты в любое приложение без буфера обмена."
         } else {
             return "macOS требует доступ к Универсальному доступу. Нажмите кнопку, откройте раздел настроек и включите тумблер напротив Text Rotator."
         }

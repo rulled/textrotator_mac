@@ -90,7 +90,7 @@ public struct QuickSnippetsView: View {
                     .foregroundColor(.secondary)
                     .font(.system(size: 13, weight: .medium))
 
-                TextField("Поиск папок и сниппетов...", text: $navState.searchText)
+                TextField("Поиск папок и текстов...", text: $navState.searchText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .focused($isSearchFocused)
@@ -179,7 +179,7 @@ public struct QuickSnippetsView: View {
         Group {
             let snippets = folder.snippets
             if snippets.isEmpty {
-                emptyPlaceholder(icon: "doc.text", message: "В этой папке пока нет сниппетов")
+                emptyPlaceholder(icon: "doc.text", message: "В этой папке пока нет текстов")
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -194,7 +194,7 @@ public struct QuickSnippetsView: View {
                                 .buttonStyle(LiteRowButtonStyle())
                                 .id(index)
                                 .help(snippet.content)
-                                .accessibilityLabel("Сниппет: \(snippet.content)")
+                                .accessibilityLabel("Текст: \(snippet.content)")
                             }
                         }
                         .padding(6)
@@ -320,7 +320,7 @@ public struct QuickSnippetsView: View {
             return "Папка \(folder.name)"
         case .snippet(let snippet, let folderName, _, _):
             let prefix = folderName.isEmpty ? "" : "из \(folderName): "
-            return "Сниппет: \(prefix)\(snippet.content)"
+            return "Текст: \(prefix)\(snippet.content)"
         }
     }
 
