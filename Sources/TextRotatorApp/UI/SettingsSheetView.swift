@@ -10,6 +10,7 @@ public struct SettingsSheetView: View {
     @State private var localKeyMonitor: Any? = nil
     @State private var isCloseHovered: Bool = false
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var updater = UpdateService.shared
 
     public init(coordinator: AppCoordinator, isPresented: Binding<Bool>) {
         self.coordinator = coordinator
@@ -22,10 +23,11 @@ public struct SettingsSheetView: View {
                 accessibilitySection
                 hotkeysSection
                 translationSection
+                updatesSection
             }
             .padding(24)
         }
-        .frame(width: 520, height: 420)
+        .frame(width: 520, height: 460)
         .overlay(alignment: .topTrailing) {
             Button {
                 stopRecording()
@@ -331,6 +333,76 @@ public struct SettingsSheetView: View {
                 }
                 .pickerStyle(.menu)
                 .frame(width: 200)
+            }
+            .padding(12)
+            .background(Color.secondary.opacity(0.06))
+            .cornerRadius(AppTheme.cardRadius)
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.cardRadius, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.12), lineWidth: 0.5)
+            )
+        }
+    }
+
+    // MARK: - Updates Section
+
+    private var updatesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Обновление программы", systemImage: "arrow.triangle.2.circlepath")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.primary)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text("TextRotator")
+                                .font(.system(size: 12.5, weight: .semibold))
+                            Text("v\(updater.currentAppVersion.description)")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1.5)
+                                .background(Color.secondary.opacity(0.12))
+                                .cornerRadius(AppTheme.badgeRadius)
+                        }
+                        Text("Проверка свежих релизов и обновлений с GitHub.")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        updater.checkForUpdates(isUserInitiated: true)
+                    } label: {
+                        HStack(spacing: 5) {
+                            if updater.state == .checking {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            Text(updater.state == .checking ? "Проверка..." : "Проверить сейчас")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(updater.state == .checking)
+                }
+
+                Divider()
+                    .opacity(0.12)
+
+                Toggle(isOn: $updater.isAutomaticCheckEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Автоматически проверять обновления")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Фоновая тихая проверка релизов при старте приложения.")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
             }
             .padding(12)
             .background(Color.secondary.opacity(0.06))

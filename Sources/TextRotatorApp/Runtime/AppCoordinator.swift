@@ -59,6 +59,14 @@ public final class AppCoordinator: ObservableObject {
         reloadDatabaseData()
         seedInitialDataIfNeeded()
         restoreCursorTranslateState()
+
+        // Background update check after launch
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if UpdateService.shared.isAutomaticCheckEnabled {
+                UpdateService.shared.checkForUpdates(isUserInitiated: false)
+            }
+        }
     }
 
     // MARK: - Setup & Hotkeys

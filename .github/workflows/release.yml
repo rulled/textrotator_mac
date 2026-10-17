@@ -1,0 +1,209 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.0.1)"
+        required: true
+        type: string
+      draft:
+        description: "Publish as draft release"
+        required: false
+        type: boolean
+        default: false
+      prerelease:
+        description: "Publish as pre-release"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: macos-14
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository with full git history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Version & Build Metadata
+        id: meta
+        run: |
+          # Resolve raw tag name
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RAW_TAG="${{ github.event.inputs.tag }}"
+          else
+            RAW_TAG="${GITHUB_REF#refs/tags/}"
+          fi
+
+          # Ensure leading 'v' in tag name for GitHub release tag
+          if [[ "$RAW_TAG" =~ ^v ]]; then
+            TAG_NAME="$RAW_TAG"
+            VERSION="${RAW_TAG#v}"
+          else
+            TAG_NAME="v${RAW_TAG}"
+            VERSION="$RAW_TAG"
+          fi
+
+          BUILD_NUMBER=$(git rev-list --count HEAD || echo "1")
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build_number=${BUILD_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "commit_hash=${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
+
+          echo "=== Release Configuration ==="
+          echo "Tag:          ${TAG_NAME}"
+          echo "Version:      ${VERSION}"
+          echo "Build Number: ${BUILD_NUMBER}"
+          echo "Commit:       ${COMMIT_HASH}"
+
+      - name: Display developer environment
+        run: |
+          sw_vers
+          xcode-select -p
+          swift --version
+
+      - name: Run Tests
+        run: |
+          swift test --parallel
+
+      - name: Mandatory Changelog Verification
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          echo "Checking CHANGELOG.md for version: ${VERSION}..."
+
+          if [ -f "scripts/check_changelog.sh" ]; then
+            chmod +x scripts/check_changelog.sh
+            ./scripts/check_changelog.sh "${VERSION}"
+          else
+            # Inline fallback verification if script is missing
+            echo "Warning: scripts/check_changelog.sh not found; performing fallback regex check."
+            if ! grep -E "^## \[(v?)${VERSION}\]" CHANGELOG.md >/dev/null 2>&1; then
+              echo "::error::Release aborted! No section found for version ${VERSION} in CHANGELOG.md."
+              exit 1
+            fi
+          fi
+
+      - name: Extract Changelog for Release Notes
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          TAG="${{ steps.meta.outputs.tag_name }}"
+
+          if [ -f "scripts/extract_changelog.sh" ]; then
+            chmod +x scripts/extract_changelog.sh
+            ./scripts/extract_changelog.sh "${VERSION}" release_notes.md
+          else
+            # Fallback extraction using awk
+            awk -v ver="${VERSION}" '
+              BEGIN { in_section = 0; found = 0 }
+              $0 ~ "^## \\[(v?)" ver "\\]" { in_section = 1; found = 1; next }
+              in_section && ($0 ~ "^## " || $0 ~ "^\\[[a-zA-Z0-9._-]+\\]:") { in_section = 0 }
+              in_section { print }
+            ' CHANGELOG.md > release_notes.md
+          fi
+
+          echo "=== Generated Release Notes Preview ==="
+          cat release_notes.md
+
+      - name: Build Application and Generate Installers (DMG & Zip)
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          BUILD_NUM="${{ steps.meta.outputs.build_number }}"
+          chmod +x scripts/*.sh
+
+          if [ -f "scripts/package.sh" ]; then
+            echo "Executing scripts/package.sh ${VERSION} ${BUILD_NUM}..."
+            ./scripts/package.sh "${VERSION}" "${BUILD_NUM}"
+          else
+            echo "Running scripts/build_app.sh..."
+            ./scripts/build_app.sh "${VERSION}" "${BUILD_NUM}"
+
+            if [ -f "scripts/package_dmg.sh" ]; then
+              ./scripts/package_dmg.sh "${VERSION}"
+            else
+              echo "Creating fallback DMG..."
+              hdiutil create -volname "TextRotator" -srcfolder "build/TextRotator.app" -ov -format UDZO "build/TextRotator-${VERSION}.dmg"
+            fi
+
+            if [ -f "scripts/package_zip.sh" ]; then
+              ./scripts/package_zip.sh "${VERSION}"
+            else
+              echo "Creating fallback Zip..."
+              ditto -c -k --sequesterRsrc --keepParent "build/TextRotator.app" "build/TextRotator-${VERSION}.zip"
+            fi
+          fi
+
+          # Ensure generic TextRotator.app.zip exists for in-app updater compatibility
+          if [ ! -f "build/TextRotator.app.zip" ] && [ -f "build/TextRotator-${VERSION}.zip" ]; then
+            cp "build/TextRotator-${VERSION}.zip" "build/TextRotator.app.zip"
+          fi
+
+      - name: Generate SHA-256 Checksums
+        run: |
+          cd build
+          shasum -a 256 *.dmg *.zip > checksums.txt
+          echo "" >> ../release_notes.md
+          echo "### Checksums (SHA-256)" >> ../release_notes.md
+          echo "\`\`\`" >> ../release_notes.md
+          cat checksums.txt >> ../release_notes.md
+          echo "\`\`\`" >> ../release_notes.md
+          cat checksums.txt
+
+      - name: Verify Built Artifacts
+        run: |
+          echo "Contents of build directory:"
+          ls -lh build/
+          codesign --verify --deep --strict build/TextRotator.app
+
+      - name: Create or Update GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag_name }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+
+          FLAGS=()
+          if [ "${{ github.event.inputs.draft }}" = "true" ]; then
+            FLAGS+=("--draft")
+          fi
+          if [ "${{ github.event.inputs.prerelease }}" = "true" ]; then
+            FLAGS+=("--prerelease")
+          fi
+
+          # Collect assets to upload
+          ASSETS=()
+          [ -f "build/TextRotator-${VERSION}.dmg" ] && ASSETS+=("build/TextRotator-${VERSION}.dmg")
+          [ -f "build/TextRotator-${VERSION}.zip" ] && ASSETS+=("build/TextRotator-${VERSION}.zip")
+          [ -f "build/TextRotator.app.zip" ] && ASSETS+=("build/TextRotator.app.zip")
+          [ -f "build/checksums.txt" ] && ASSETS+=("build/checksums.txt")
+
+          echo "Publishing release for ${TAG} with assets: ${ASSETS[*]}..."
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists. Updating release notes and uploading assets..."
+            gh release edit "${TAG}" --title "TextRotator ${TAG}" --notes-file release_notes.md "${FLAGS[@]}"
+            gh release upload "${TAG}" "${ASSETS[@]}" --clobber
+          else
+            gh release create "${TAG}" "${ASSETS[@]}" \
+              --title "TextRotator ${TAG}" \
+              --notes-file release_notes.md \
+              "${FLAGS[@]}"
+          fi
+
+          echo "✅ Release ${TAG} published successfully!"

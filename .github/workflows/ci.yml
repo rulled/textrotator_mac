@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test (macOS)
+    runs-on: macos-14
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Display developer environment
+        run: |
+          echo "=== macOS Version ==="
+          sw_vers
+          echo "=== Active Xcode Developer Path ==="
+          xcode-select -p
+          echo "=== Swift Version ==="
+          swift --version
+
+      - name: Run Swift Unit & Integration Tests
+        run: |
+          swift test --parallel
+
+      - name: Build TextRotator executable (Release)
+        run: |
+          swift build -c release
+
+      - name: Verify App Bundle Assembly & Ad-Hoc Signing
+        run: |
+          chmod +x scripts/*.sh
+          ./scripts/build_app.sh 1.0.0-ci 1
+          echo "Verifying App Bundle signature..."
+          codesign --verify --deep --strict build/TextRotator.app
+          echo "App bundle verification passed."
+
+      - name: Validate Release Scripts
+        run: |
+          if [ -f "scripts/check_changelog.sh" ]; then
+            chmod +x scripts/check_changelog.sh
+            echo "Checking changelog script syntax and validation for 1.0.0..."
+            ./scripts/check_changelog.sh 1.0.0
+          fi
+          if [ -f "scripts/extract_changelog.sh" ]; then
+            chmod +x scripts/extract_changelog.sh
+            echo "Checking changelog extraction for 1.0.0..."
+            ./scripts/extract_changelog.sh 1.0.0 /tmp/ci_notes.md
+            head -n 10 /tmp/ci_notes.md
+          fi

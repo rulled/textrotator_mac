@@ -56,7 +56,18 @@ public final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        // 3. Quit
+        // 3. Check for Updates
+        let updateItem = NSMenuItem(
+            title: "Проверить обновления...",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        updateItem.target = self
+        menu.addItem(updateItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // 4. Quit
         let quitItem = NSMenuItem(
             title: "Завершить программу",
             action: #selector(quitApp),
@@ -80,6 +91,10 @@ public final class StatusBarController: NSObject, NSMenuDelegate {
     @objc private func toggleCursorTranslate() {
         coordinator.toggleCursorTranslateMode()
         buildMenu()
+    }
+
+    @objc private func checkForUpdates() {
+        UpdateService.shared.checkForUpdates(isUserInitiated: true)
     }
 
     @objc private func quitApp() {
