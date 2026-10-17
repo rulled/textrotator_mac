@@ -45,8 +45,8 @@ final class DatabaseTests: XCTestCase {
 
     func testDeleteFolderCascadesSnippets() throws {
         let folder = try db.createFolder(name: "Temp Folder")
-        let s1 = try db.createSnippet(folderId: folder.id, content: "Snippet 1")
-        let s2 = try db.createSnippet(folderId: folder.id, content: "Snippet 2")
+        _ = try db.createSnippet(folderId: folder.id, content: "Snippet 1")
+        _ = try db.createSnippet(folderId: folder.id, content: "Snippet 2")
 
         var snippets = try db.listSnippets(folderId: folder.id)
         XCTAssertEqual(snippets.count, 2)

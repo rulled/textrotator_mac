@@ -292,7 +292,7 @@ final class HotkeyTests: XCTestCase {
         pipeline.unsubscribe(id1)
         pipeline.unsubscribe(id2)
         pipeline.resetDebounce()
-
+        pipeline.endOperation()
         let exp3 = expectation(description: "Second dispatch new sub")
         _ = pipeline.subscribe { _ in
             _ = counter2.increment()
