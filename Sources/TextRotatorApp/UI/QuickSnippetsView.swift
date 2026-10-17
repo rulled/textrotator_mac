@@ -6,46 +6,13 @@ public struct QuickSnippetsView: View {
     @ObservedObject var coordinator: AppCoordinator
     @Environment(\.colorScheme) private var colorScheme
 
-    // Navigation State: nil = Root (Folders or Unified Search), non-nil = Inside specific Folder
-    @State private var activeFolder: FolderWithSnippets? = nil
-
-    // Selection Indices
-    @State private var selectedFolderIndex: Int = 0
-    @State private var selectedSnippetIndex: Int = 0
-    @State private var selectedSearchResultIndex: Int = 0
-
-    // Search Query
-    @State private var searchText: String = ""
+    @StateObject private var navState: QuickSnippetsNavigationState
     @FocusState private var isSearchFocused: Bool
 
     public init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
+        _navState = StateObject(wrappedValue: QuickSnippetsNavigationState(folders: coordinator.folders))
     }
-
-    // MARK: - Computed Properties
-
-    private var isSearching: Bool {
-        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    /// Unified smart search results when at root level
-    private var searchResults: [SmartSearchItem] {
-        SmartSearchEngine.search(query: searchText, in: coordinator.folders)
-    }
-
-    /// Snippets displayed when inside a folder (filtered if search text present)
-    private var displayedFolderSnippets: [SnippetItem] {
-        guard let folder = activeFolder else { return [] }
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if query.isEmpty {
-            return folder.snippets
-        }
-        return folder.snippets.filter { snippet in
-            SmartSearchEngine.calculateScore(query: query, candidate: snippet.content) > 0
-        }
-    }
-
-    // MARK: - Body
 
     public var body: some View {
         VStack(spacing: 0) {
@@ -56,7 +23,7 @@ public struct QuickSnippetsView: View {
 
             // Main Content Area
             ZStack {
-                if activeFolder != nil {
+                if navState.activeFolder != nil {
                     // LEVEL 2: Inside Folder (Folder Detail View)
                     folderDetailListView
                         .transition(
@@ -65,7 +32,7 @@ public struct QuickSnippetsView: View {
                                 removal: .move(edge: .trailing).combined(with: .opacity)
                             )
                         )
-                } else if isSearching {
+                } else if navState.isSearching {
                     // UNIFIED SEARCH: Matching Folders + Matching Snippets with Badges
                     unifiedSearchResultsView
                         .transition(.opacity)
@@ -86,11 +53,15 @@ public struct QuickSnippetsView: View {
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.panelRadius, style: .continuous))
         .overlay(AppTheme.panelBackgroundStroke(for: colorScheme))
-        .animation(AppTheme.springFast, value: activeFolder?.id)
-        .animation(AppTheme.springFast, value: isSearching)
+        .animation(AppTheme.springFast, value: navState.activeFolder?.id)
+        .animation(AppTheme.springFast, value: navState.isSearching)
         .onAppear {
+            navState.folders = coordinator.folders
             isSearchFocused = true
             setupPanelKeyInterception()
+        }
+        .onChange(of: coordinator.folders) { _, newFolders in
+            navState.folders = newFolders
         }
         .onDisappear {
             teardownPanelKeyInterception()
@@ -106,9 +77,9 @@ public struct QuickSnippetsView: View {
                 .font(.system(size: 13, weight: .medium))
 
             // If inside a folder: show interactive Breadcrumb Pill
-            if let folder = activeFolder {
+            if let folder = navState.activeFolder {
                 Button {
-                    backToRoot()
+                    navState.backToRoot()
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
@@ -133,24 +104,18 @@ public struct QuickSnippetsView: View {
 
             // Single Permanent Focused TextField (Never unmounted -> Focus Never Lost)
             TextField(
-                activeFolder == nil
+                navState.activeFolder == nil
                     ? "Умный поиск по папкам и текстам..."
                     : "Поиск в папке...",
-                text: $searchText
+                text: $navState.searchText
             )
             .textFieldStyle(.plain)
             .font(.system(size: 13))
             .focused($isSearchFocused)
-            .onChange(of: searchText) { _, _ in
-                selectedSearchResultIndex = 0
-                selectedSnippetIndex = 0
-            }
 
-            if !searchText.isEmpty {
+            if !navState.searchText.isEmpty {
                 Button {
-                    searchText = ""
-                    selectedSearchResultIndex = 0
-                    selectedSnippetIndex = 0
+                    navState.searchText = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.secondary)
@@ -189,16 +154,16 @@ public struct QuickSnippetsView: View {
 
     private var rootFoldersListView: some View {
         Group {
-            if coordinator.folders.isEmpty {
+            if navState.folders.isEmpty {
                 emptyPlaceholder(icon: "folder", message: "Папок пока нет")
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 2) {
-                            ForEach(Array(coordinator.folders.enumerated()), id: \.element.id) { index, folder in
-                                let isSelected = (selectedFolderIndex == index)
+                            ForEach(Array(navState.folders.enumerated()), id: \.element.id) { index, folder in
+                                let isSelected = (navState.selectedFolderIndex == index)
                                 Button {
-                                    openFolder(folder)
+                                    navState.openFolder(folder)
                                 } label: {
                                     HStack(spacing: 8) {
                                         Image(systemName: isSelected ? "folder.fill" : "folder")
@@ -240,7 +205,7 @@ public struct QuickSnippetsView: View {
                         }
                         .padding(6)
                     }
-                    .onChange(of: selectedFolderIndex) { _, newIndex in
+                    .onChange(of: navState.selectedFolderIndex) { _, newIndex in
                         proxy.scrollTo(newIndex, anchor: .center)
                     }
                 }
@@ -252,14 +217,14 @@ public struct QuickSnippetsView: View {
 
     private var unifiedSearchResultsView: some View {
         Group {
-            if searchResults.isEmpty {
+            if navState.searchResults.isEmpty {
                 emptyPlaceholder(icon: "magnifyingglass", message: "Ничего не найдено")
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 2) {
-                            ForEach(Array(searchResults.enumerated()), id: \.element.id) { index, item in
-                                let isSelected = (selectedSearchResultIndex == index)
+                            ForEach(Array(navState.searchResults.enumerated()), id: \.element.id) { index, item in
+                                let isSelected = (navState.selectedSearchResultIndex == index)
                                 Button {
                                     executeSearchItem(item)
                                 } label: {
@@ -334,7 +299,7 @@ public struct QuickSnippetsView: View {
                         }
                         .padding(6)
                     }
-                    .onChange(of: selectedSearchResultIndex) { _, newIndex in
+                    .onChange(of: navState.selectedSearchResultIndex) { _, newIndex in
                         proxy.scrollTo(newIndex, anchor: .center)
                     }
                 }
@@ -346,14 +311,17 @@ public struct QuickSnippetsView: View {
 
     private var folderDetailListView: some View {
         Group {
-            if displayedFolderSnippets.isEmpty {
-                emptyPlaceholder(icon: "doc.text", message: searchText.isEmpty ? "В папке нет сниппетов" : "Сниппет не найден")
+            if navState.displayedFolderSnippets.isEmpty {
+                emptyPlaceholder(
+                    icon: "doc.text",
+                    message: navState.searchText.isEmpty ? "В папке нет сниппетов" : "Сниппет не найден"
+                )
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 2) {
-                            ForEach(Array(displayedFolderSnippets.enumerated()), id: \.element.id) { index, snippet in
-                                let isSelected = (selectedSnippetIndex == index)
+                            ForEach(Array(navState.displayedFolderSnippets.enumerated()), id: \.element.id) { index, snippet in
+                                let isSelected = (navState.selectedSnippetIndex == index)
                                 Button {
                                     insertSnippet(snippet.content)
                                 } label: {
@@ -387,7 +355,7 @@ public struct QuickSnippetsView: View {
                         }
                         .padding(6)
                     }
-                    .onChange(of: selectedSnippetIndex) { _, newIndex in
+                    .onChange(of: navState.selectedSnippetIndex) { _, newIndex in
                         proxy.scrollTo(newIndex, anchor: .center)
                     }
                 }
@@ -417,7 +385,21 @@ public struct QuickSnippetsView: View {
         guard let panel = coordinator.quickSnippetsPanel?.panel else { return }
 
         panel.onKeyDown = { [self] event in
-            return self.handleKeyDownEvent(event)
+            let result = navState.handleKeyDown(keyCode: event.keyCode)
+            switch result {
+            case .handled:
+                AppTheme.hapticClick()
+                return true
+            case .ignored:
+                return false
+            case .insertSnippet(let text):
+                insertSnippet(text)
+                return true
+            case .closeOverlay:
+                coordinator.quickSnippetsPanel?.close()
+                coordinator.restoreForegroundApp()
+                return true
+            }
         }
     }
 
@@ -425,159 +407,14 @@ public struct QuickSnippetsView: View {
         coordinator.quickSnippetsPanel?.panel.onKeyDown = nil
     }
 
-    private func handleKeyDownEvent(_ event: NSEvent) -> Bool {
-        let keyCode = event.keyCode
-
-        // 125 = Down Arrow
-        if keyCode == 125 {
-            if activeFolder != nil {
-                if !displayedFolderSnippets.isEmpty && selectedSnippetIndex < displayedFolderSnippets.count - 1 {
-                    selectedSnippetIndex += 1
-                    AppTheme.hapticClick()
-                }
-            } else if isSearching {
-                if !searchResults.isEmpty && selectedSearchResultIndex < searchResults.count - 1 {
-                    selectedSearchResultIndex += 1
-                    AppTheme.hapticClick()
-                }
-            } else {
-                if !coordinator.folders.isEmpty && selectedFolderIndex < coordinator.folders.count - 1 {
-                    selectedFolderIndex += 1
-                    AppTheme.hapticClick()
-                }
-            }
-            return true
-        }
-
-        // 126 = Up Arrow
-        if keyCode == 126 {
-            if activeFolder != nil {
-                if selectedSnippetIndex > 0 {
-                    selectedSnippetIndex -= 1
-                    AppTheme.hapticClick()
-                }
-            } else if isSearching {
-                if selectedSearchResultIndex > 0 {
-                    selectedSearchResultIndex -= 1
-                    AppTheme.hapticClick()
-                }
-            } else {
-                if selectedFolderIndex > 0 {
-                    selectedFolderIndex -= 1
-                    AppTheme.hapticClick()
-                }
-            }
-            return true
-        }
-
-        // 124 = Right Arrow
-        if keyCode == 124 {
-            if activeFolder == nil && !isSearching {
-                if !coordinator.folders.isEmpty {
-                    let idx = max(0, min(selectedFolderIndex, coordinator.folders.count - 1))
-                    openFolder(coordinator.folders[idx])
-                    return true
-                }
-            } else if activeFolder == nil && isSearching {
-                if !searchResults.isEmpty {
-                    let idx = max(0, min(selectedSearchResultIndex, searchResults.count - 1))
-                    if case .folder(let folder, _) = searchResults[idx] {
-                        openFolder(folder)
-                        return true
-                    }
-                }
-            }
-            return false // Let text cursor move inside search field
-        }
-
-        // 123 = Left Arrow
-        if keyCode == 123 {
-            if activeFolder != nil {
-                backToRoot()
-                return true
-            }
-            return false // Let text cursor move inside search field
-        }
-
-        // 53 = Escape
-        if keyCode == 53 {
-            if activeFolder != nil {
-                backToRoot()
-                return true
-            }
-            if !searchText.isEmpty {
-                searchText = ""
-                selectedSearchResultIndex = 0
-                return true
-            }
-            coordinator.quickSnippetsPanel?.close()
-            coordinator.restoreForegroundApp()
-            return true
-        }
-
-        // 36 = Return / Enter
-        if keyCode == 36 {
-            if activeFolder != nil {
-                if !displayedFolderSnippets.isEmpty {
-                    let idx = max(0, min(selectedSnippetIndex, displayedFolderSnippets.count - 1))
-                    insertSnippet(displayedFolderSnippets[idx].content)
-                }
-                return true
-            }
-            if isSearching {
-                if !searchResults.isEmpty {
-                    let idx = max(0, min(selectedSearchResultIndex, searchResults.count - 1))
-                    executeSearchItem(searchResults[idx])
-                }
-                return true
-            }
-            if !coordinator.folders.isEmpty {
-                let idx = max(0, min(selectedFolderIndex, coordinator.folders.count - 1))
-                openFolder(coordinator.folders[idx])
-                return true
-            }
-            return true
-        }
-
-        // 51 = Delete / Backspace
-        if keyCode == 51 {
-            if searchText.isEmpty && activeFolder != nil {
-                backToRoot()
-                return true
-            }
-            return false // Let normal backspace delete character in search field
-        }
-
-        return false
-    }
-
     // MARK: - Actions
 
     private func executeSearchItem(_ item: SmartSearchItem) {
         switch item {
         case .folder(let folder, _):
-            openFolder(folder)
+            navState.openFolder(folder)
         case .snippet(let snippet, _, _, _):
             insertSnippet(snippet.content)
-        }
-    }
-
-    private func openFolder(_ folder: FolderWithSnippets) {
-        AppTheme.hapticClick()
-        withAnimation(AppTheme.springFast) {
-            activeFolder = folder
-            selectedSnippetIndex = 0
-            searchText = ""
-        }
-    }
-
-    private func backToRoot() {
-        AppTheme.hapticClick()
-        withAnimation(AppTheme.springFast) {
-            activeFolder = nil
-            selectedFolderIndex = 0
-            selectedSearchResultIndex = 0
-            searchText = ""
         }
     }
 
