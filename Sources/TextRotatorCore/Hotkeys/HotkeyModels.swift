@@ -161,7 +161,33 @@ public enum KeyCode {
         case "x": return KeyCode.x
         case "y": return KeyCode.y
         case "z": return KeyCode.z
-        default: return nil
+        case "0": return 0x1D
+        case "1": return 0x12
+        case "2": return 0x13
+        case "3": return 0x14
+        case "4": return 0x15
+        case "5": return 0x17
+        case "6": return 0x16
+        case "7": return 0x1A
+        case "8": return 0x1C
+        case "9": return 0x19
+        case ",", "<": return 43
+        case ".", ">": return 47
+        case "/", "?": return 44
+        case ";", ":": return 41
+        case "'", "\"": return 39
+        case "[", "{": return 33
+        case "]", "}": return 30
+        case "\\", "|": return 42
+        case "-", "_": return 27
+        case "=", "+": return 24
+        case "`", "~": return 50
+        default:
+            if lower.hasPrefix("key(") && lower.hasSuffix(")") {
+                let inner = lower.dropFirst(4).dropLast(1)
+                return UInt32(inner)
+            }
+            return nil
         }
     }
 
@@ -211,6 +237,27 @@ public enum KeyCode {
         case KeyCode.x: return "X"
         case KeyCode.y: return "Y"
         case KeyCode.z: return "Z"
+        case 43: return ","
+        case 47: return "."
+        case 44: return "/"
+        case 41: return ";"
+        case 39: return "'"
+        case 33: return "["
+        case 30: return "]"
+        case 42: return "\\"
+        case 27: return "-"
+        case 24: return "="
+        case 50: return "`"
+        case 0x1D: return "0"
+        case 0x12: return "1"
+        case 0x13: return "2"
+        case 0x14: return "3"
+        case 0x15: return "4"
+        case 0x17: return "5"
+        case 0x16: return "6"
+        case 0x1A: return "7"
+        case 0x1C: return "8"
+        case 0x19: return "9"
         default: return "Key(\(keyCode))"
         }
     }

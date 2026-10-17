@@ -58,6 +58,7 @@ public final class AppCoordinator: ObservableObject {
         setupHotkeys()
         reloadDatabaseData()
         seedInitialDataIfNeeded()
+        restoreCursorTranslateState()
     }
 
     // MARK: - Setup & Hotkeys
@@ -65,8 +66,12 @@ public final class AppCoordinator: ObservableObject {
     private func setupHotkeys() {
         var config = HotkeyConfiguration.default
         for action in HotkeyAction.allCases {
-            if let saved = UserDefaults.standard.string(forKey: "hotkey_\(action.rawValue)"),
-               let combo = KeyCombo(string: saved) {
+            if UserDefaults.standard.object(forKey: "hotkey_code_\(action.rawValue)") != nil {
+                let code = UInt32(UserDefaults.standard.integer(forKey: "hotkey_code_\(action.rawValue)"))
+                let mods = KeyModifiers(rawValue: UInt32(UserDefaults.standard.integer(forKey: "hotkey_mods_\(action.rawValue)")))
+                config.setKeyCombo(KeyCombo(keyCode: code, modifiers: mods), for: action)
+            } else if let saved = UserDefaults.standard.string(forKey: "hotkey_\(action.rawValue)"),
+                      let combo = KeyCombo(string: saved) {
                 config.setKeyCombo(combo, for: action)
             }
         }
@@ -82,6 +87,8 @@ public final class AppCoordinator: ObservableObject {
     public func updateHotkey(for action: HotkeyAction, combo: KeyCombo) {
         do {
             try hotkeyService.register(action: action, combo: combo)
+            UserDefaults.standard.set(Int(combo.keyCode), forKey: "hotkey_code_\(action.rawValue)")
+            UserDefaults.standard.set(Int(combo.modifiers.rawValue), forKey: "hotkey_mods_\(action.rawValue)")
             UserDefaults.standard.set(combo.displayString, forKey: "hotkey_\(action.rawValue)")
             objectWillChange.send()
             AppTheme.hapticSuccess()
@@ -95,6 +102,8 @@ public final class AppCoordinator: ObservableObject {
             try hotkeyService.updateConfiguration(.default)
             for action in HotkeyAction.allCases {
                 UserDefaults.standard.removeObject(forKey: "hotkey_\(action.rawValue)")
+                UserDefaults.standard.removeObject(forKey: "hotkey_code_\(action.rawValue)")
+                UserDefaults.standard.removeObject(forKey: "hotkey_mods_\(action.rawValue)")
             }
             objectWillChange.send()
             AppTheme.hapticClick()
@@ -273,6 +282,7 @@ public final class AppCoordinator: ObservableObject {
 
     public func toggleCursorTranslateMode(showFeedback: Bool = true) {
         isCursorTranslateEnabled.toggle()
+        UserDefaults.standard.set(isCursorTranslateEnabled, forKey: "isCursorTranslateEnabled")
         if showFeedback {
             translationIndicator.showNearCursor(
                 state: isCursorTranslateEnabled ? .checkmark : .cross,
@@ -280,7 +290,6 @@ public final class AppCoordinator: ObservableObject {
             )
             AppTheme.hapticSuccess()
         }
-
         if isCursorTranslateEnabled {
             if cursorWatcher == nil {
                 cursorWatcher = CursorSelectionWatcher(textIO: textIO) { [weak self] selectedText in
@@ -293,6 +302,20 @@ public final class AppCoordinator: ObservableObject {
             cursorWatcher?.start()
         } else {
             cursorWatcher?.stop()
+        }
+    }
+
+    private func restoreCursorTranslateState() {
+        let enabled = UserDefaults.standard.bool(forKey: "isCursorTranslateEnabled")
+        self.isCursorTranslateEnabled = enabled
+        if enabled {
+            cursorWatcher = CursorSelectionWatcher(textIO: textIO) { [weak self] selectedText in
+                guard let self else { return }
+                Task {
+                    await self.showTranslatorOverlay(text: selectedText)
+                }
+            }
+            cursorWatcher?.start()
         }
     }
 

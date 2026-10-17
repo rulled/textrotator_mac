@@ -24,6 +24,7 @@ public struct SnippetsManagerView: View {
     @FocusState private var isSnippetEditFocused: Bool
     @State private var isShowingSettings: Bool = false
     @State private var snippetPendingDeletion: SnippetItem?
+    @Environment(\.colorScheme) private var colorScheme
 
     public init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
@@ -49,9 +50,26 @@ public struct SnippetsManagerView: View {
         }
         .toolbar(removing: .sidebarToggle)
         .frame(minWidth: 780, minHeight: 480)
-        .sheet(isPresented: $isShowingSettings) {
-            SettingsSheetView(coordinator: coordinator, isPresented: $isShowingSettings)
+        .overlay {
+            if isShowingSettings {
+                ZStack {
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            isShowingSettings = false
+                        }
+
+                    SettingsSheetView(coordinator: coordinator, isPresented: $isShowingSettings)
+                        .background(.ultraThinMaterial)
+                        .activeGlassAppearance()
+                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.panelRadius, style: .continuous))
+                        .overlay(AppTheme.glassSpecularBorder(for: colorScheme))
+                        .shadow(color: Color.black.opacity(0.35), radius: 32, y: 12)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
         }
+        .animation(AppTheme.springFast, value: isShowingSettings)
         .confirmationDialog(
             "Удалить папку «\(folderPendingDeletion?.name ?? "")»?",
             isPresented: Binding(

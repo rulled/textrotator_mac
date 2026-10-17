@@ -31,11 +31,10 @@ public struct SettingsSheetView: View {
                 stopRecording()
                 isPresented = false
             } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16, weight: .medium))
-                    .symbolRenderingMode(.hierarchical)
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundColor(isCloseHovered ? .primary : .secondary)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 26, height: 26)
                     .background(Color(NSColor.windowBackgroundColor).opacity(isCloseHovered ? 0.95 : 0.80))
                     .clipShape(Circle())
                     .contentShape(Circle())
