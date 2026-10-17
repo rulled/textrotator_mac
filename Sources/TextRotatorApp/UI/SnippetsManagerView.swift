@@ -14,6 +14,7 @@ public struct SnippetsManagerView: View {
     @State private var isAddingSnippet: Bool = false
     @State private var renamingFolder: FolderWithSnippets?
     @State private var renameFolderName: String = ""
+    @State private var folderPendingDeletion: FolderWithSnippets?
 
     public init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
@@ -48,22 +49,22 @@ public struct SnippetsManagerView: View {
                                     .font(.system(size: 13))
                                 Spacer()
                                 Text("\(folder.snippets.count)")
-                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
                                     .foregroundColor(.secondary)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 1)
                                     .background(Color.secondary.opacity(0.12))
-                                    .cornerRadius(6)
+                                    .cornerRadius(AppTheme.badgeRadius)
                             }
                         }
                         .contextMenu {
-                            Button("Переименовать") {
+                            Button("Переименовать...") {
                                 renamingFolder = folder
                                 renameFolderName = folder.name
                             }
                             Divider()
-                            Button("Удалить папку", role: .destructive) {
-                                deleteFolder(folder)
+                            Button("Удалить папку...", role: .destructive) {
+                                folderPendingDeletion = folder
                             }
                         }
                     }
@@ -80,6 +81,7 @@ public struct SnippetsManagerView: View {
                         Image(systemName: "folder.badge.plus")
                     }
                     .help("Создать папку")
+                    .accessibilityLabel("Создать новую папку")
                 }
             }
         } detail: {
@@ -98,30 +100,16 @@ public struct SnippetsManagerView: View {
 
                         Spacer()
 
-                        // Search
-                        HStack(spacing: 6) {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.secondary)
-                                .font(.system(size: 12))
-                            TextField("Поиск по тексту...", text: $searchText)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 12))
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(Color(NSColor.controlBackgroundColor))
-                        .cornerRadius(6)
-                        .frame(width: 200)
-
                         // Add Snippet Button
                         Button {
                             newSnippetContent = ""
                             isAddingSnippet = true
                         } label: {
-                            Label("Добавить", systemImage: "plus")
+                            Label("Добавить сниппет", systemImage: "plus")
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.regular)
+                        .help("Создать новый сниппет (Cmd+N)")
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -129,26 +117,25 @@ public struct SnippetsManagerView: View {
 
                     Divider()
 
-                    // Snippets List
+                    // Snippets List or Native ContentUnavailableView
                     if filteredSnippets.isEmpty {
-                        VStack(spacing: 10) {
-                            Spacer()
-                            Image(systemName: "doc.text")
-                                .font(.system(size: 32))
-                                .foregroundColor(.secondary)
-                            Text(searchText.isEmpty ? "В этой папке пока нет шаблонов" : "По запросу ничего не найдено")
-                                .font(.system(size: 13))
-                                .foregroundColor(.secondary)
-                            if searchText.isEmpty {
-                                Button("Создать первый сниппет") {
+                        if !searchText.isEmpty {
+                            ContentUnavailableView.search(text: searchText)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            ContentUnavailableView {
+                                Label("В этой папке пока нет сниппетов", systemImage: "doc.text")
+                            } description: {
+                                Text("Создайте первый сниппет для быстрого доступа по хоткею.")
+                            } actions: {
+                                Button("Создать сниппет") {
                                     newSnippetContent = ""
                                     isAddingSnippet = true
                                 }
                                 .buttonStyle(.bordered)
                             }
-                            Spacer()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         List {
                             ForEach(Array(filteredSnippets.enumerated()), id: \.element.id) { index, snippet in
@@ -164,6 +151,7 @@ public struct SnippetsManagerView: View {
                                     onCopy: {
                                         NSPasteboard.general.clearContents()
                                         NSPasteboard.general.setString(snippet.content, forType: .string)
+                                        AppTheme.hapticSuccess()
                                     }
                                 )
                             }
@@ -198,16 +186,34 @@ public struct SnippetsManagerView: View {
                     .padding(.vertical, 8)
                     .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
                 }
+                .searchable(text: $searchText, placement: .toolbar, prompt: "Поиск по тексту...")
             } else {
-                VStack(spacing: 8) {
-                    Text("Выберите или создайте папку")
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ContentUnavailableView("Папка не выбрана", systemImage: "folder", description: Text("Выберите папку из списка слева или создайте новую."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .frame(minWidth: 720, minHeight: 460)
+        // Confirmation Dialog: Delete Folder (Resolves HIGH trigger)
+        .confirmationDialog(
+            "Удалить папку «\(folderPendingDeletion?.name ?? "")»?",
+            isPresented: Binding(
+                get: { folderPendingDeletion != nil },
+                set: { if !$0 { folderPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Удалить папку", role: .destructive) {
+                if let folder = folderPendingDeletion {
+                    deleteFolder(folder)
+                }
+                folderPendingDeletion = nil
+            }
+            Button("Отмена", role: .cancel) {
+                folderPendingDeletion = nil
+            }
+        } message: {
+            Text("Все сниппеты в этой папке (\(folderPendingDeletion?.snippets.count ?? 0) шт.) будут безвозвратно удалены.")
+        }
         // Dialog: Add Folder
         .sheet(isPresented: $isAddingFolder) {
             VStack(alignment: .leading, spacing: 14) {
@@ -315,6 +321,7 @@ public struct SnippetsManagerView: View {
             let created = try coordinator.database.createFolder(name: name)
             coordinator.reloadDatabaseData()
             selectedFolderId = created.id
+            AppTheme.hapticClick()
         } catch {
             print("Failed to create folder: \(error)")
         }
@@ -328,6 +335,7 @@ public struct SnippetsManagerView: View {
             if selectedFolderId == folder.id {
                 selectedFolderId = coordinator.folders.first?.id
             }
+            AppTheme.hapticClick()
         } catch {
             print("Failed to delete folder: \(error)")
         }
@@ -340,6 +348,7 @@ public struct SnippetsManagerView: View {
         do {
             _ = try coordinator.database.createSnippet(folderId: folder.id, content: text)
             coordinator.reloadDatabaseData()
+            AppTheme.hapticSuccess()
         } catch {
             print("Failed to create snippet: \(error)")
         }
@@ -350,6 +359,7 @@ public struct SnippetsManagerView: View {
         do {
             try coordinator.database.deleteSnippet(id: snippet.id)
             coordinator.reloadDatabaseData()
+            AppTheme.hapticClick()
         } catch {
             print("Failed to delete snippet: \(error)")
         }
@@ -371,11 +381,11 @@ private struct SnippetDetailRow: View {
         HStack(alignment: .top, spacing: 10) {
             // Index badge
             Text("\(index + 1)")
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundColor(.secondary)
                 .frame(width: 22, height: 22)
                 .background(Color.secondary.opacity(0.1))
-                .cornerRadius(5)
+                .cornerRadius(AppTheme.badgeRadius)
 
             // Content
             Text(snippet.content)
@@ -390,14 +400,16 @@ private struct SnippetDetailRow: View {
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.borderless)
-                .help("Скопировать в буфер")
+                .help("Скопировать в буфер обмена")
+                .accessibilityLabel("Скопировать сниппет")
 
                 Button(action: onEdit) {
                     Image(systemName: "pencil")
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.borderless)
-                .help("Редактировать")
+                .help("Редактировать текст")
+                .accessibilityLabel("Редактировать сниппет")
 
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
@@ -405,14 +417,17 @@ private struct SnippetDetailRow: View {
                         .foregroundColor(.red)
                 }
                 .buttonStyle(.borderless)
-                .help("Удалить")
+                .help("Удалить сниппет")
+                .accessibilityLabel("Удалить сниппет")
             }
             .opacity(isHovered ? 1.0 : 0.4)
+            .animation(AppTheme.springFast, value: isHovered)
         }
         .padding(.vertical, 6)
         .onHover { hovering in
             isHovered = hovering
         }
+        .help(snippet.content)
     }
 }
 

@@ -79,14 +79,29 @@ public final class FloatingPanelController: NSObject, NSWindowDelegate {
     }
 
     public func show() {
+        panel.alphaValue = 0.0
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: false)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.14
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1.0
+        }
     }
 
     public func close() {
-        panel.orderOut(nil)
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.10
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().alphaValue = 0.0
+        }) { [weak self] in
+            DispatchQueue.main.async { [weak self] in
+                self?.panel.orderOut(nil)
+                self?.panel.alphaValue = 1.0
+            }
+        }
     }
-
     public func windowDidResignKey(_ notification: Notification) {
         // Auto-close on blur if needed
         close()

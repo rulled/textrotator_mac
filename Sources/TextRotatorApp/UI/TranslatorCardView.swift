@@ -4,7 +4,10 @@ import TextRotatorCore
 
 public struct TranslatorCardView: View {
     @ObservedObject var coordinator: AppCoordinator
+    @Environment(\.colorScheme) private var colorScheme
+
     @State private var copiedFeedback: Bool = false
+    @State private var swapRotation: Double = 0.0
 
     public init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
@@ -12,38 +15,41 @@ public struct TranslatorCardView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Header: Languages & Provider Switcher
+            // MARK: - Header: Languages, Swap & Provider
             HStack(spacing: 8) {
                 // Source language badge
                 Text(coordinator.translatorSourceLang.uppercased())
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.15))
-                    .cornerRadius(4)
+                    .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.14))
+                    .cornerRadius(AppTheme.badgeRadius)
 
-                // Swap button
+                // Animated Swap Button
                 Button {
                     swapLanguages()
                 } label: {
                     Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.secondary)
+                        .rotationEffect(.degrees(swapRotation))
                 }
                 .buttonStyle(.plain)
+                .help("Поменять языки местами")
+                .accessibilityLabel("Сменить направление перевода")
 
                 // Target language badge
                 Text(coordinator.translatorTargetLang.uppercased())
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
                     .background(Color.accentColor.opacity(0.2))
                     .foregroundColor(.accentColor)
-                    .cornerRadius(4)
+                    .cornerRadius(AppTheme.badgeRadius)
 
                 Spacer()
 
-                // Provider Switcher Menu
+                // Provider Switcher Menu with Latency Badge
                 Menu {
                     Button("Yandex Translate (Быстрый)") {
                         switchProvider(to: "Yandex")
@@ -52,22 +58,32 @@ public struct TranslatorCardView: View {
                         switchProvider(to: "Google")
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         Circle()
                             .fill(coordinator.activeProviderName == "Yandex" ? Color.red : Color.blue)
                             .frame(width: 6, height: 6)
+
                         Text(coordinator.activeProviderName)
                             .font(.system(size: 11, weight: .medium))
+
+                        if let latency = coordinator.lastLatencyMs {
+                            Text("• \(latency)ms")
+                                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.system(size: 8))
+                            .foregroundColor(.secondary)
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
                     .background(Color.secondary.opacity(0.12))
-                    .cornerRadius(6)
+                    .cornerRadius(AppTheme.pillRadius)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .accessibilityLabel("Выбор сервиса перевода")
 
                 // Close Button
                 Button {
@@ -76,23 +92,31 @@ public struct TranslatorCardView: View {
                 } label: {
                     Text("esc")
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .padding(.horizontal, 4)
+                        .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(Color.secondary.opacity(0.15))
-                        .cornerRadius(4)
+                        .cornerRadius(AppTheme.badgeRadius)
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
+                .help("Закрыть окно (Escape)")
+                .accessibilityLabel("Закрыть")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
 
-            Divider()
+            // Non-blocking Pulse Progress Indicator under header
+            if coordinator.isTranslating {
+                LinearProgressPulse()
+                    .frame(height: 2)
+            } else {
+                Divider()
+            }
 
-            // Source Text Box (Compact)
+            // MARK: - Source Text Box (Compact preview)
             if !coordinator.translatorSourceText.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(coordinator.translatorSourceText)
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
@@ -101,29 +125,27 @@ public struct TranslatorCardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.vertical, 7)
                 .background(Color(NSColor.windowBackgroundColor).opacity(0.3))
+                .help(coordinator.translatorSourceText)
 
                 Divider()
             }
 
-            // Translation Output Area
+            // MARK: - Translation Result Text Area
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
-                    if coordinator.isTranslating {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                            Text("Перевод...")
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 12)
+                    if coordinator.translatorResultText.isEmpty && !coordinator.isTranslating {
+                        Text("Выделите текст в любом приложении для перевода")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 10)
                     } else {
-                        Text(coordinator.translatorResultText.isEmpty ? "Выделите текст для перевода" : coordinator.translatorResultText)
+                        Text(coordinator.translatorResultText)
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundColor(coordinator.translatorResultText.isEmpty ? .secondary : .primary)
+                            .foregroundColor(.primary)
+                            .lineSpacing(3)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -134,44 +156,49 @@ public struct TranslatorCardView: View {
 
             Divider()
 
-            // Footer Actions
+            // MARK: - Footer Actions
             HStack(spacing: 8) {
-                // Copy Action
+                // Copy Action Button
                 Button {
                     copyTranslation()
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         Image(systemName: copiedFeedback ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11))
+                            .foregroundColor(copiedFeedback ? .green : .primary)
                         Text(copiedFeedback ? "Скопировано" : "Копировать")
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
                     .background(Color.secondary.opacity(0.12))
-                    .cornerRadius(6)
+                    .cornerRadius(AppTheme.pillRadius)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(SpringFeedbackButtonStyle())
                 .disabled(coordinator.translatorResultText.isEmpty)
+                .help("Скопировать перевод в буфер обмена (Cmd+C)")
+                .accessibilityLabel("Скопировать перевод")
 
                 Spacer()
 
-                // Insert In-Place Action
+                // In-Place Insert Action Button
                 Button {
-                    coordinator.insertCurrentTranslation()
+                    insertTranslation()
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         Text("↵ Вставить в приложение")
                             .font(.system(size: 11, weight: .semibold))
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 6)
                     .background(Color.accentColor)
                     .foregroundColor(.white)
-                    .cornerRadius(6)
+                    .cornerRadius(AppTheme.pillRadius)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(SpringFeedbackButtonStyle())
                 .disabled(coordinator.translatorResultText.isEmpty)
+                .help("Заменить выделенный текст переводом (Enter)")
+                .accessibilityLabel("Вставить перевод в активное приложение")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -179,14 +206,11 @@ public struct TranslatorCardView: View {
         }
         .frame(width: 420, height: 260)
         .background(.regularMaterial)
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-        )
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.panelRadius, style: .continuous))
+        .overlay(AppTheme.panelBackgroundStroke(for: colorScheme))
         .onKeyPress { keyPress in
             if keyPress.key == .return {
-                coordinator.insertCurrentTranslation()
+                insertTranslation()
                 return .handled
             }
             if keyPress.key == .escape {
@@ -198,7 +222,14 @@ public struct TranslatorCardView: View {
         }
     }
 
+    // MARK: - Actions
+
     private func swapLanguages() {
+        withAnimation(AppTheme.springBouncy) {
+            swapRotation += 180.0
+        }
+        AppTheme.hapticClick()
+
         let temp = coordinator.translatorSourceLang
         coordinator.translatorSourceLang = coordinator.translatorTargetLang
         coordinator.translatorTargetLang = temp
@@ -214,6 +245,8 @@ public struct TranslatorCardView: View {
 
     private func switchProvider(to providerName: String) {
         coordinator.activeProviderName = providerName
+        AppTheme.hapticClick()
+
         if !coordinator.translatorSourceText.isEmpty {
             Task {
                 await coordinator.requestTranslation(
@@ -229,9 +262,58 @@ public struct TranslatorCardView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(coordinator.translatorResultText, forType: .string)
 
-        copiedFeedback = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            copiedFeedback = false
+        AppTheme.hapticSuccess()
+        withAnimation(AppTheme.springFast) {
+            copiedFeedback = true
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation(AppTheme.springFast) {
+                copiedFeedback = false
+            }
+        }
+    }
+
+    private func insertTranslation() {
+        AppTheme.hapticSuccess()
+        coordinator.insertCurrentTranslation()
+    }
+}
+
+// MARK: - Linear Progress Pulse Bar
+
+private struct LinearProgressPulse: View {
+    @State private var phase: CGFloat = 0.0
+
+    var body: some View {
+        GeometryReader { proxy in
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.accentColor.opacity(0.2),
+                            Color.accentColor,
+                            Color.accentColor.opacity(0.2)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: proxy.size.width * 0.4)
+                .offset(x: phase * proxy.size.width * 0.7)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                        phase = 1.0
+                    }
+                }
+        }
+        .clipped()
+    }
+}
+
+private struct SpringFeedbackButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(AppTheme.springFast, value: configuration.isPressed)
     }
 }

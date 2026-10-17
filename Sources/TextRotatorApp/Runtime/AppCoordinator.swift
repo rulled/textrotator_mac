@@ -27,7 +27,7 @@ public final class AppCoordinator: ObservableObject {
     @Published public var translatorTargetLang: String = "ru"
     @Published public var isTranslating: Bool = false
     @Published public var activeProviderName: String = "Yandex"
-
+    @Published public var lastLatencyMs: Int? = nil
     public init(
         database: DatabaseServiceProtocol? = nil,
         translationRouter: TranslationRouterProtocol = TranslationRouter(),
@@ -181,6 +181,7 @@ public final class AppCoordinator: ObservableObject {
             self.translatorSourceLang = result.detectedSourceLanguage
             self.translatorTargetLang = result.targetLanguage
             self.activeProviderName = result.providerName
+            self.lastLatencyMs = result.latencyMs
         } catch {
             // Fallback
             do {
@@ -189,6 +190,7 @@ public final class AppCoordinator: ObservableObject {
                 self.translatorSourceLang = fallbackResult.detectedSourceLanguage
                 self.translatorTargetLang = fallbackResult.targetLanguage
                 self.activeProviderName = fallbackResult.providerName
+                self.lastLatencyMs = fallbackResult.latencyMs
             } catch {
                 self.translatorResultText = "Ошибка перевода: \(error.localizedDescription)"
             }
