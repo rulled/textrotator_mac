@@ -241,7 +241,7 @@ final class HotkeyTests: XCTestCase {
         pipeline.setAsyncHandler { action in
             if action == .instantTranslateAndReplace {
                 firstStarted.fulfill()
-                try? await Task.sleep(nanoseconds: 100_000_000)
+                try? await Task.sleep(nanoseconds: 400_000_000)
                 firstFinished.fulfill()
             }
         }
