@@ -8,6 +8,7 @@ public struct SettingsSheetView: View {
     @State private var isAccessibilityGranted: Bool = false
     @State private var recordingAction: HotkeyAction? = nil
     @State private var localKeyMonitor: Any? = nil
+    @State private var isCloseHovered: Bool = false
     @Environment(\.colorScheme) private var colorScheme
 
     public init(coordinator: AppCoordinator, isPresented: Binding<Bool>) {
@@ -25,6 +26,28 @@ public struct SettingsSheetView: View {
             .padding(24)
         }
         .frame(width: 520, height: 420)
+        .overlay(alignment: .topTrailing) {
+            Button {
+                stopRecording()
+                isPresented = false
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16, weight: .medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(isCloseHovered ? .primary : .secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Color(NSColor.windowBackgroundColor).opacity(isCloseHovered ? 0.95 : 0.80))
+                    .clipShape(Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .onHover { isCloseHovered = $0 }
+            .padding(.top, 14)
+            .padding(.trailing, 16)
+            .zIndex(100)
+            .help("Закрыть настройки (Escape)")
+            .accessibilityLabel("Закрыть настройки")
+        }
         .onAppear {
             refreshAccessibility()
         }

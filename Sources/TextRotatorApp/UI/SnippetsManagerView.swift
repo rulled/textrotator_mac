@@ -23,6 +23,7 @@ public struct SnippetsManagerView: View {
     @State private var editingSnippetText: String = ""
     @FocusState private var isSnippetEditFocused: Bool
     @State private var isShowingSettings: Bool = false
+    @State private var snippetPendingDeletion: SnippetItem?
 
     public init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
@@ -70,6 +71,26 @@ public struct SnippetsManagerView: View {
             }
         } message: {
             Text("Все тексты в этой папке будут безвозвратно удалены.")
+        }
+        .confirmationDialog(
+            "Удалить текст?",
+            isPresented: Binding(
+                get: { snippetPendingDeletion != nil },
+                set: { if !$0 { snippetPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Удалить текст", role: .destructive) {
+                if let snippet = snippetPendingDeletion {
+                    deleteSnippet(snippet)
+                }
+                snippetPendingDeletion = nil
+            }
+            Button("Отмена", role: .cancel) {
+                snippetPendingDeletion = nil
+            }
+        } message: {
+            Text("Этот текст будет безвозвратно удален.")
         }
     }
 
@@ -180,7 +201,7 @@ public struct SnippetsManagerView: View {
                                 startEditingSnippet(snippet)
                             },
                             onDelete: {
-                                deleteSnippet(snippet)
+                                snippetPendingDeletion = snippet
                             }
                         )
                     }
@@ -305,26 +326,6 @@ public struct SnippetsManagerView: View {
                     .onSubmit {
                         saveFolderName(folder: folder)
                     }
-
-                Button {
-                    saveFolderName(folder: folder)
-                } label: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.accentColor)
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .help("Сохранить имя")
-
-                Button {
-                    editingFolderId = nil
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .help("Отмена")
             }
             .padding(.vertical, 2)
             .onAppear {
@@ -621,7 +622,8 @@ private struct SnippetDetailRow: View {
 
             Text(snippet.content)
                 .font(.system(size: 13))
-                .lineLimit(4)
+                .lineLimit(3)
+                .truncationMode(.tail)
                 .lineSpacing(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -687,7 +689,7 @@ private struct FolderSidebarRowContent: View {
 
             Spacer()
 
-            if isHovered || isSelected {
+            if isHovered {
                 HStack(spacing: 2) {
                     Button(action: onRename) {
                         Image(systemName: "pencil")
