@@ -16,7 +16,7 @@ public final class WindowManager: NSObject, NSWindowDelegate {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 100, y: 100, width: 850, height: 540),
+            contentRect: NSRect(x: 100, y: 100, width: 880, height: 560),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -25,7 +25,7 @@ public final class WindowManager: NSObject, NSWindowDelegate {
         window.title = "Text Rotator"
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
-        window.minSize = NSSize(width: 650, height: 420)
+        window.minSize = NSSize(width: 780, height: 480)
         window.delegate = self
         window.isReleasedWhenClosed = false
 

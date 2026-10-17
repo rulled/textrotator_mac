@@ -22,6 +22,7 @@ public struct SnippetsManagerView: View {
     @State private var editingSnippetId: Int64?
     @State private var editingSnippetText: String = ""
     @FocusState private var isSnippetEditFocused: Bool
+    @State private var isShowingSettings: Bool = false
 
     public init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
@@ -41,10 +42,15 @@ public struct SnippetsManagerView: View {
     public var body: some View {
         NavigationSplitView {
             sidebarContent
+                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
         } detail: {
             detailContent
         }
-        .frame(minWidth: 720, minHeight: 460)
+        .toolbar(removing: .sidebarToggle)
+        .frame(minWidth: 780, minHeight: 480)
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsSheetView(coordinator: coordinator, isPresented: $isShowingSettings)
+        }
         .confirmationDialog(
             "Удалить папку «\(folderPendingDeletion?.name ?? "")»?",
             isPresented: Binding(
@@ -196,22 +202,48 @@ public struct SnippetsManagerView: View {
                 Text(coordinator.textIO.isAccessibilityGranted() ? "Accessibility активен" : "Accessibility не разрешен")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
+
+                if !coordinator.textIO.isAccessibilityGranted() {
+                    Button("Исправить...") {
+                        openAccessibilitySettings()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.accentColor)
+                    .help("Открыть Системные настройки для разрешения Accessibility")
+                }
             }
 
             Spacer()
 
-            HStack(spacing: 12) {
-                Text("F1: Мгновенный перевод")
-                Text("F2: Перевод выделения")
-                Text("F3: Панель сниппетов")
-                Text("F4: Переводчик")
+            Button {
+                isShowingSettings = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 11))
+                    Text("Настройки")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Color.secondary.opacity(0.12))
+                .cornerRadius(AppTheme.pillRadius)
             }
-            .font(.system(size: 11, design: .monospaced))
-            .foregroundColor(.secondary)
+            .buttonStyle(.plain)
+            .help("Настройки приложения и хоткеев (Cmd+,)")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+    }
+
+    private func openAccessibilitySettings() {
+        coordinator.textIO.promptAccessibilityPermission()
+        let urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        if let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     // MARK: - Inline New Folder Row (Top of sidebar)

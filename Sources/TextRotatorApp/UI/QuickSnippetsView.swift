@@ -40,10 +40,8 @@ public struct QuickSnippetsView: View {
             .animation(AppTheme.springFast, value: navState.activeFolder?.id)
             .animation(AppTheme.springFast, value: navState.isSearching)
 
-            Divider()
-            footerHintsBar
         }
-        .frame(width: 400, height: 320)
+        .frame(width: 400, height: 300)
         .background(.ultraThinMaterial)
         .activeGlassAppearance()
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.panelRadius, style: .continuous))
@@ -346,46 +344,6 @@ public struct QuickSnippetsView: View {
         }
     }
 
-    // MARK: - Footer
-
-    private var footerHintsBar: some View {
-        HStack(spacing: 12) {
-            if navState.isSearching {
-                hintItem(keys: "↑↓", label: "Навигация")
-                hintItem(keys: "↵", label: "Выбрать")
-                hintItem(keys: "esc", label: "Очистить")
-            } else if navState.activeFolder != nil {
-                hintItem(keys: "↑↓", label: "Текст")
-                hintItem(keys: "↵", label: "Вставить")
-                hintItem(keys: "←", label: "Папки")
-                hintItem(keys: "esc", label: "Закрыть")
-            } else {
-                hintItem(keys: "↑↓", label: "Папка")
-                hintItem(keys: "↵ / →", label: "Открыть")
-                hintItem(keys: "esc", label: "Закрыть")
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Color(NSColor.windowBackgroundColor).opacity(0.3))
-    }
-
-    private func hintItem(keys: String, label: String) -> some View {
-        HStack(spacing: 4) {
-            Text(keys)
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(Color.secondary.opacity(0.15))
-                .cornerRadius(AppTheme.badgeRadius)
-                .foregroundColor(.secondary)
-
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(.secondary)
-        }
-    }
 
     // MARK: - Empty State
 
