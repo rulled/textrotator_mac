@@ -128,6 +128,27 @@ public final class FloatingPanelController: NSObject, NSWindowDelegate {
         callback?()
     }
 
+    public func animateResize(to newSize: NSSize) {
+        var frame = panel.frame
+        guard abs(frame.size.height - newSize.height) > 2 || abs(frame.size.width - newSize.width) > 2 else { return }
+        let heightDiff = newSize.height - frame.size.height
+        frame.size = newSize
+        frame.origin.y -= heightDiff
+
+        if let screen = panel.screen {
+            let visible = screen.visibleFrame
+            if frame.minY < visible.minY {
+                frame.origin.y = visible.minY + 8
+            }
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.20
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(frame, display: true)
+        }
+    }
+
 
     public func windowDidResignKey(_ notification: Notification) {
         guard !isPresenting, !isClosing, isVisible else { return }

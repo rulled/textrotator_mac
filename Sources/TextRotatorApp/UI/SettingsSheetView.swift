@@ -6,6 +6,8 @@ public struct SettingsSheetView: View {
     @ObservedObject var coordinator: AppCoordinator
     @Binding var isPresented: Bool
     @State private var isAccessibilityGranted: Bool = false
+    @State private var recordingAction: HotkeyAction? = nil
+    @State private var localKeyMonitor: Any? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     public init(coordinator: AppCoordinator, isPresented: Binding<Bool>) {
@@ -61,11 +63,9 @@ public struct SettingsSheetView: View {
 
             // Footer
             HStack {
-                Text("Text Rotator macOS • Native Apple Silicon")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
                 Spacer()
                 Button("Готово") {
+                    stopRecording()
                     isPresented = false
                 }
                 .buttonStyle(.borderedProminent)
@@ -79,6 +79,9 @@ public struct SettingsSheetView: View {
         .frame(width: 540, height: 480)
         .onAppear {
             refreshAccessibility()
+        }
+        .onDisappear {
+            stopRecording()
         }
     }
 
@@ -172,42 +175,50 @@ public struct SettingsSheetView: View {
 
     private var hotkeysSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Горячие клавиши (Глобальные хоткеи)", systemImage: "keyboard.fill")
-                .font(.system(size: 13, weight: .bold))
+            HStack {
+                Label("Горячие клавиши (Глобальные хоткеи)", systemImage: "keyboard.fill")
+                    .font(.system(size: 13, weight: .bold))
 
-            VStack(spacing: 6) {
+                Spacer()
+
+                Button("По умолчанию") {
+                    coordinator.resetHotkeysToDefault()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundColor(.accentColor)
+                .help("Сбросить все комбинации клавиш по умолчанию (F1-F4)")
+            }
+
+            VStack(spacing: 8) {
                 hotkeyRow(
+                    action: .quickSnippetsOverlay,
                     title: "Быстрые шаблоны (Quick Snippets)",
-                    description: "Всплывающий оверлей с папками и текстами у курсора",
-                    keyBadge: "F3",
-                    subKey: "Fn + F3"
+                    description: "Всплывающий оверлей с папками и текстами у курсора"
                 )
 
                 Divider()
 
                 hotkeyRow(
+                    action: .instantTranslateAndReplace,
                     title: "Мгновенный перевод по месту",
-                    description: "Перевод выделенного текста с микро-индикатором",
-                    keyBadge: "F1",
-                    subKey: "Fn + F1"
+                    description: "Перевод выделенного текста с микро-индикатором"
                 )
 
                 Divider()
 
                 hotkeyRow(
+                    action: .translatorOverlay,
                     title: "Оверлей переводчика",
-                    description: "Плавающая карточка с выбором движка и сменой языков",
-                    keyBadge: "F4",
-                    subKey: "Fn + F4"
+                    description: "Плавающая карточка со сменой языка и провайдера"
                 )
 
                 Divider()
 
                 hotkeyRow(
+                    action: .cursorTranslateToggle,
                     title: "Автоперевод выделения мыши",
                     description: "Всплытие карточки перевода сразу при отпускании мыши",
-                    keyBadge: "F2",
-                    subKey: "Fn + F2",
                     isToggle: true
                 )
             }
@@ -222,13 +233,15 @@ public struct SettingsSheetView: View {
     }
 
     private func hotkeyRow(
+        action: HotkeyAction,
         title: String,
         description: String,
-        keyBadge: String,
-        subKey: String,
         isToggle: Bool = false
     ) -> some View {
-        HStack {
+        let isRecording = (recordingAction == action)
+        let combo = coordinator.currentKeyCombo(for: action)
+
+        return HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 12.5, weight: .medium))
@@ -249,20 +262,71 @@ public struct SettingsSheetView: View {
                 .labelsHidden()
             }
 
-            HStack(spacing: 4) {
-                Text(keyBadge)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color.secondary.opacity(0.18))
-                    .cornerRadius(AppTheme.badgeRadius)
-
-                Text("(\(subKey))")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+            Button {
+                if isRecording {
+                    stopRecording()
+                } else {
+                    startRecording(action: action)
+                }
+            } label: {
+                if isRecording {
+                    Text("Нажмите клавиши...")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.accentColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.accentColor.opacity(0.15))
+                        .cornerRadius(AppTheme.badgeRadius)
+                } else {
+                    Text(combo.displayString)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(Color.secondary.opacity(0.15))
+                        .cornerRadius(AppTheme.badgeRadius)
+                }
             }
+            .buttonStyle(.plain)
+            .help("Нажмите, чтобы записать новую комбинацию клавиш (Esc для отмены)")
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 2)
+    }
+
+    private func startRecording(action: HotkeyAction) {
+        AppTheme.hapticClick()
+        recordingAction = action
+        stopLocalMonitor()
+
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
+            if event.keyCode == 53 {
+                stopRecording()
+                return nil
+            }
+
+            var mods: KeyModifiers = []
+            if event.modifierFlags.contains(.command) { mods.insert(.command) }
+            if event.modifierFlags.contains(.shift) { mods.insert(.shift) }
+            if event.modifierFlags.contains(.option) { mods.insert(.option) }
+            if event.modifierFlags.contains(.control) { mods.insert(.control) }
+
+            let combo = KeyCombo(keyCode: UInt32(event.keyCode), modifiers: mods)
+            coordinator.updateHotkey(for: action, combo: combo)
+            stopRecording()
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        recordingAction = nil
+        stopLocalMonitor()
+    }
+
+    private func stopLocalMonitor() {
+        if let monitor = localKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            localKeyMonitor = nil
+        }
     }
 
     // MARK: - Section 3: Translation

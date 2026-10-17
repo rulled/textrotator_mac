@@ -63,11 +63,48 @@ public final class AppCoordinator: ObservableObject {
     // MARK: - Setup & Hotkeys
 
     private func setupHotkeys() {
+        var config = HotkeyConfiguration.default
+        for action in HotkeyAction.allCases {
+            if let saved = UserDefaults.standard.string(forKey: "hotkey_\(action.rawValue)"),
+               let combo = KeyCombo(string: saved) {
+                config.setKeyCombo(combo, for: action)
+            }
+        }
+        try? hotkeyService.updateConfiguration(config)
+
         hotkeyService.pipeline.setAsyncHandler { [weak self] action in
             guard let self else { return }
             await self.handleAction(action)
         }
         try? hotkeyService.start()
+    }
+
+    public func updateHotkey(for action: HotkeyAction, combo: KeyCombo) {
+        do {
+            try hotkeyService.register(action: action, combo: combo)
+            UserDefaults.standard.set(combo.displayString, forKey: "hotkey_\(action.rawValue)")
+            objectWillChange.send()
+            AppTheme.hapticSuccess()
+        } catch {
+            print("Failed to register hotkey: \(error)")
+        }
+    }
+
+    public func resetHotkeysToDefault() {
+        do {
+            try hotkeyService.updateConfiguration(.default)
+            for action in HotkeyAction.allCases {
+                UserDefaults.standard.removeObject(forKey: "hotkey_\(action.rawValue)")
+            }
+            objectWillChange.send()
+            AppTheme.hapticClick()
+        } catch {
+            print("Failed to reset hotkeys: \(error)")
+        }
+    }
+
+    public func currentKeyCombo(for action: HotkeyAction) -> KeyCombo {
+        hotkeyService.configuration.keyCombo(for: action) ?? HotkeyConfiguration.default.keyCombo(for: action) ?? KeyCombo(keyCode: KeyCode.f1)
     }
 
     public func handleAction(_ action: HotkeyAction) async {
@@ -213,12 +250,12 @@ public final class AppCoordinator: ObservableObject {
         self.translatorResultText = ""
         self.isTranslating = true
 
-        let cardSize = NSSize(width: 380, height: 210)
+        let initialHeight = Self.optimalTranslatorHeight(for: captured)
+        let cardSize = NSSize(width: 380, height: initialHeight)
         let panel = FloatingPanelController(title: "Translator")
         let view = TranslatorCardView(coordinator: self)
         panel.setContent(view: view, size: cardSize)
         panel.positionNearCursor(size: cardSize)
-
         panel.onClose = { [weak self] in
             self?.translatorPanel = nil
             self?.restoreForegroundApp()
@@ -267,6 +304,8 @@ public final class AppCoordinator: ObservableObject {
             self.translatorTargetLang = result.targetLanguage
             self.activeProviderName = result.providerName
             self.lastLatencyMs = result.latencyMs
+            let height = Self.optimalTranslatorHeight(for: self.translatorResultText)
+            self.translatorPanel?.animateResize(to: NSSize(width: 380, height: height))
         } catch {
             // Fallback
             do {
@@ -281,6 +320,24 @@ public final class AppCoordinator: ObservableObject {
             }
         }
         self.isTranslating = false
+    }
+
+    public static func optimalTranslatorHeight(for text: String) -> CGFloat {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let count = trimmed.count
+        if count == 0 {
+            return 145
+        } else if count <= 30 && !trimmed.contains("\n") {
+            return 130 // Compact for single word / short phrase
+        } else if count <= 90 {
+            return 165
+        } else if count <= 220 {
+            return 210
+        } else if count <= 420 {
+            return 260
+        } else {
+            return 320 // Max height, scrollable
+        }
     }
 
     public func insertCurrentTranslation() {

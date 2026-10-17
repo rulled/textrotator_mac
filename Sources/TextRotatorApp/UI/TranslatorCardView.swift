@@ -25,18 +25,19 @@ public struct TranslatorCardView: View {
                     .background(Color.secondary.opacity(0.14))
                     .cornerRadius(AppTheme.badgeRadius)
 
-                // Animated Swap Button
+                // Animated Swap Button (Compact, 2x smaller)
                 Button {
                     swapLanguages()
                 } label: {
                     Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.secondary)
                         .rotationEffect(.degrees(swapRotation))
+                        .frame(width: 14, height: 14)
                 }
-                .glassButton()
+                .buttonStyle(.plain)
                 .help("Поменять языки местами")
                 .accessibilityLabel("Сменить направление перевода")
-
                 // Target language badge
                 Text(coordinator.translatorTargetLang.uppercased())
                     .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
@@ -57,11 +58,7 @@ public struct TranslatorCardView: View {
                         switchProvider(to: "Google")
                     }
                 } label: {
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(coordinator.activeProviderName == "Yandex" ? Color.red : Color.blue)
-                            .frame(width: 6, height: 6)
-
+                    HStack(spacing: 4) {
                         Text(coordinator.activeProviderName)
                             .font(.system(size: 11, weight: .medium))
 
@@ -104,17 +101,32 @@ public struct TranslatorCardView: View {
                             .font(.system(size: 13))
                             .foregroundColor(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 10)
+                            .padding(.vertical, 8)
+                    } else if isSingleWordOrShort {
+                        Text(coordinator.translatorResultText)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 4)
+                    } else if isVeryLongText {
+                        Text(coordinator.translatorResultText)
+                            .font(.system(size: 12.5, weight: .regular))
+                            .lineSpacing(3)
+                            .foregroundColor(.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         Text(coordinator.translatorResultText)
                             .font(.system(size: 13.5, weight: .regular))
-                            .foregroundColor(.primary)
                             .lineSpacing(3.5)
+                            .foregroundColor(.primary)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
             }
             .frame(maxHeight: .infinity)
 
@@ -157,7 +169,8 @@ public struct TranslatorCardView: View {
             .padding(.vertical, 8)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
         }
-        .frame(width: 380, height: 210)
+        .frame(width: 380)
+        .frame(maxHeight: .infinity)
         .background(.ultraThinMaterial)
         .activeGlassAppearance()
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.panelRadius, style: .continuous))
@@ -173,6 +186,15 @@ public struct TranslatorCardView: View {
             }
             return .ignored
         }
+    }
+
+    private var isSingleWordOrShort: Bool {
+        let trimmed = coordinator.translatorResultText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed.count <= 28 && !trimmed.contains("\n")
+    }
+
+    private var isVeryLongText: Bool {
+        coordinator.translatorResultText.count > 250
     }
 
     // MARK: - Actions

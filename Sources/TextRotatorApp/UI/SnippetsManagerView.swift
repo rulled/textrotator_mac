@@ -195,15 +195,15 @@ public struct SnippetsManagerView: View {
 
     private var statusFooter: some View {
         HStack {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(coordinator.textIO.isAccessibilityGranted() ? Color.green : Color.orange)
-                    .frame(width: 8, height: 8)
-                Text(coordinator.textIO.isAccessibilityGranted() ? "Accessibility активен" : "Accessibility не разрешен")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+            if !coordinator.textIO.isAccessibilityGranted() {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.orange)
+                        .frame(width: 8, height: 8)
+                    Text("Accessibility не разрешен")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
 
-                if !coordinator.textIO.isAccessibilityGranted() {
                     Button("Исправить...") {
                         openAccessibilitySettings()
                     }
