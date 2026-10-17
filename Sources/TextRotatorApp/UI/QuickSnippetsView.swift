@@ -86,14 +86,6 @@ public struct QuickSnippetsView: View {
                     .lineLimit(1)
                     .foregroundColor(.primary)
 
-                Text("\(folder.snippets.count)")
-                    .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1.5)
-                    .background(Color.secondary.opacity(0.12))
-                    .cornerRadius(AppTheme.badgeRadius)
-
                 Spacer()
 
                 closeButton
@@ -196,14 +188,6 @@ public struct QuickSnippetsView: View {
                 .lineLimit(1)
 
             Spacer()
-
-            Text("\(folder.snippets.count)")
-                .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1.5)
-                .background(Color.secondary.opacity(0.12))
-                .cornerRadius(AppTheme.badgeRadius)
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 10, weight: .bold))
@@ -322,14 +306,6 @@ public struct QuickSnippetsView: View {
                     .foregroundColor(.primary)
 
                 Spacer()
-
-                Text("\(folder.snippets.count)")
-                    .font(.system(size: 9.5, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1.5)
-                    .background(Color.secondary.opacity(0.12))
-                    .cornerRadius(AppTheme.badgeRadius)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .bold))

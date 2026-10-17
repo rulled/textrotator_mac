@@ -44,18 +44,8 @@ public struct SnippetsManagerView: View {
                 Section("Папки") {
                     ForEach(coordinator.folders) { folder in
                         NavigationLink(value: folder.id) {
-                            HStack {
-                                Label(folder.name, systemImage: "folder")
-                                    .font(.system(size: 13))
-                                Spacer()
-                                Text("\(folder.snippets.count)")
-                                    .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
-                                    .foregroundColor(.secondary)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 1)
-                                    .background(Color.secondary.opacity(0.12))
-                                    .cornerRadius(AppTheme.badgeRadius)
-                            }
+                            Label(folder.name, systemImage: "folder")
+                                .font(.system(size: 13))
                         }
                         .contextMenu {
                             Button("Переименовать...") {
@@ -90,13 +80,8 @@ public struct SnippetsManagerView: View {
                 VStack(spacing: 0) {
                     // Header Toolbar
                     HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(folder.name)
-                                .font(.system(size: 18, weight: .bold))
-                            Text("\(folder.snippets.count) сниппетов")
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
-                        }
+                        Text(folder.name)
+                            .font(.system(size: 18, weight: .bold))
 
                         Spacer()
 
