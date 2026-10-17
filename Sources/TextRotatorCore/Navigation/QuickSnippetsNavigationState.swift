@@ -11,96 +11,95 @@ public enum QuickSnippetsKeyResult: Equatable, Sendable {
 
 /// Decoupled, fully unit-testable navigation state machine for QuickSnippets overlay.
 ///
-/// Implements instant tabbed folder + snippet navigation:
-/// - `↓` / `↑` (Down/Up): Move selection through snippets in the active folder (or search results).
-/// - `→` / `←` (Right/Left) or `Tab`: Switch active folder tabs, instantly updating visible snippets.
-/// - `Enter`: Insert selected snippet at cursor in the background target application.
-/// - `Escape`: Clear search query if active, or dismiss overlay.
+/// Layout: horizontal folder tabs + vertical snippet list + unified search.
+/// - `↓` / `↑`: Move selection through snippets (or search results).
+/// - `→` / `←` / `Tab`: Switch folder tabs.
+/// - `Enter`: Insert selected snippet.
+/// - `Escape`: Clear search, or dismiss overlay.
 @MainActor
 public final class QuickSnippetsNavigationState: ObservableObject {
 
-    // MARK: - State Properties
+    // MARK: - Published State
 
-    /// Available folders with their snippets.
     @Published public var folders: [FolderWithSnippets] = [] {
-        didSet {
-            clampIndices()
-        }
+        didSet { rebuildState() }
     }
 
-    /// Selection index among folder tabs.
-    @Published public var selectedFolderIndex: Int = 0 {
-        didSet {
-            if oldValue != selectedFolderIndex {
-                clampIndices()
-            }
-        }
-    }
-
-    /// Selection index among snippets inside the currently selected folder.
-    @Published public var selectedSnippetIndex: Int = 0
-
-    /// Selection index among unified search results.
-    @Published public var selectedSearchResultIndex: Int = 0
-
-    /// Current search query in the unified search bar.
     @Published public var searchText: String = "" {
-        didSet {
-            selectedSearchResultIndex = 0
-            selectedSnippetIndex = 0
-        }
+        didSet { rebuildState() }
     }
 
-    // MARK: - Initializer
+    @Published public private(set) var selectedFolderIndex: Int = 0
+    @Published public private(set) var selectedSnippetIndex: Int = 0
+    @Published public private(set) var selectedSearchResultIndex: Int = 0
+    @Published public private(set) var searchResults: [SmartSearchItem] = []
 
-    public init(folders: [FolderWithSnippets] = []) {
-        self.folders = folders
-        self.selectedFolderIndex = 0
-        self.selectedSnippetIndex = 0
-        self.selectedSearchResultIndex = 0
-    }
-
-    // MARK: - Computed Properties
+    // MARK: - Computed
 
     public var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// The currently active folder selected via folder tabs.
     public var currentFolder: FolderWithSnippets? {
         guard !folders.isEmpty else { return nil }
-        let idx = max(0, min(selectedFolderIndex, folders.count - 1))
-        return folders[idx]
+        return folders[selectedFolderIndex]
     }
 
-    /// Backward-compatibility alias for currentFolder.
-    public var activeFolder: FolderWithSnippets? {
-        currentFolder
-    }
-
-    /// Snippets belonging to the currently selected folder.
     public var currentFolderSnippets: [SnippetItem] {
-        guard let folder = currentFolder else { return [] }
-        return folder.snippets
+        currentFolder?.snippets ?? []
     }
 
-    /// Backward-compatibility alias for currentFolderSnippets.
-    public var displayedFolderSnippets: [SnippetItem] {
-        currentFolderSnippets
+    // MARK: - Init
+
+    public init(folders: [FolderWithSnippets] = []) {
+        self.folders = folders
+        // didSet doesn't fire during init, so call manually
+        rebuildState()
     }
 
-    /// Unified search results matching `searchText`.
-    public var searchResults: [SmartSearchItem] {
-        SmartSearchEngine.search(query: searchText, in: folders)
+    // MARK: - State Rebuild (single point of truth)
+
+    private func rebuildState() {
+        // Clamp folder index
+        if folders.isEmpty {
+            if selectedFolderIndex != 0 { selectedFolderIndex = 0 }
+            if selectedSnippetIndex != 0 { selectedSnippetIndex = 0 }
+        } else {
+            let maxFolder = folders.count - 1
+            if selectedFolderIndex > maxFolder {
+                selectedFolderIndex = maxFolder
+            }
+            // Clamp snippet index to current folder
+            let snippetCount = currentFolderSnippets.count
+            if snippetCount == 0 {
+                if selectedSnippetIndex != 0 { selectedSnippetIndex = 0 }
+            } else if selectedSnippetIndex >= snippetCount {
+                selectedSnippetIndex = snippetCount - 1
+            }
+        }
+
+        // Recompute search results (once, cached as stored property)
+        let newResults = isSearching
+            ? SmartSearchEngine.search(query: searchText, in: folders)
+            : []
+        searchResults = newResults
+
+        // Clamp search result index
+        if searchResults.isEmpty {
+            if selectedSearchResultIndex != 0 { selectedSearchResultIndex = 0 }
+        } else if selectedSearchResultIndex >= searchResults.count {
+            selectedSearchResultIndex = searchResults.count - 1
+        }
     }
 
-    // MARK: - Navigation Transitions
+    // MARK: - Navigation API
 
     public func selectFolder(index: Int) {
         guard !folders.isEmpty else { return }
-        selectedFolderIndex = max(0, min(index, folders.count - 1))
+        let clamped = max(0, min(index, folders.count - 1))
+        selectedFolderIndex = clamped
         selectedSnippetIndex = 0
-        searchText = ""
+        if isSearching { searchText = "" }
     }
 
     public func openFolder(_ folder: FolderWithSnippets) {
@@ -113,39 +112,10 @@ public final class QuickSnippetsNavigationState: ObservableObject {
         selectedFolderIndex = 0
         selectedSnippetIndex = 0
         selectedSearchResultIndex = 0
-        searchText = ""
+        if !searchText.isEmpty { searchText = "" }
     }
 
-    private func clampIndices() {
-        if !folders.isEmpty {
-            let maxFolder = folders.count - 1
-            if selectedFolderIndex > maxFolder {
-                selectedFolderIndex = maxFolder
-            } else if selectedFolderIndex < 0 {
-                selectedFolderIndex = 0
-            }
-
-            let snippetCount = currentFolderSnippets.count
-            if snippetCount > 0 {
-                if selectedSnippetIndex >= snippetCount {
-                    selectedSnippetIndex = snippetCount - 1
-                } else if selectedSnippetIndex < 0 {
-                    selectedSnippetIndex = 0
-                }
-            } else if selectedSnippetIndex != 0 {
-                selectedSnippetIndex = 0
-            }
-        } else {
-            if selectedFolderIndex != 0 {
-                selectedFolderIndex = 0
-            }
-            if selectedSnippetIndex != 0 {
-                selectedSnippetIndex = 0
-            }
-        }
-    }
-
-    // MARK: - Standard Key Codes
+    // MARK: - Key Codes
 
     public static let keyLeftArrow: UInt16 = 123
     public static let keyRightArrow: UInt16 = 124
@@ -155,86 +125,65 @@ public final class QuickSnippetsNavigationState: ObservableObject {
     public static let keyReturn: UInt16 = 36
     public static let keyEscape: UInt16 = 53
     public static let keyDelete: UInt16 = 51
+
     // MARK: - Key Event Processing
 
-    /// Evaluates a key code and transitions state accordingly.
-    /// - Parameter keyCode: Hardware virtual key code.
-    /// - Returns: `QuickSnippetsKeyResult` indicating whether it was handled, ignored, or triggers an action.
     public func handleKeyDown(keyCode: UInt16) -> QuickSnippetsKeyResult {
-        // 1. DOWN ARROW (125) - Navigate content downwards
-        if keyCode == Self.keyDownArrow {
+        switch keyCode {
+
+        // ↓ Down Arrow — navigate snippets / search results downward
+        case Self.keyDownArrow:
             if isSearching {
-                if !searchResults.isEmpty && selectedSearchResultIndex < searchResults.count - 1 {
+                if selectedSearchResultIndex < searchResults.count - 1 {
                     selectedSearchResultIndex += 1
                 }
-            } else {
-                let count = currentFolderSnippets.count
-                if count > 0 && selectedSnippetIndex < count - 1 {
-                    selectedSnippetIndex += 1
-                }
+            } else if selectedSnippetIndex < currentFolderSnippets.count - 1 {
+                selectedSnippetIndex += 1
             }
             return .handled
-        }
 
-        // 2. UP ARROW (126) - Navigate content upwards
-        if keyCode == Self.keyUpArrow {
+        // ↑ Up Arrow — navigate snippets / search results upward
+        case Self.keyUpArrow:
             if isSearching {
                 if selectedSearchResultIndex > 0 {
                     selectedSearchResultIndex -= 1
                 }
-            } else {
-                if selectedSnippetIndex > 0 {
-                    selectedSnippetIndex -= 1
-                }
+            } else if selectedSnippetIndex > 0 {
+                selectedSnippetIndex -= 1
             }
             return .handled
-        }
 
-        // 3. RIGHT ARROW (124) - Switch folder tab to the right (when not typing in search)
-        if keyCode == Self.keyRightArrow {
-            if !isSearching {
-                if !folders.isEmpty && selectedFolderIndex < folders.count - 1 {
-                    selectedFolderIndex += 1
-                    selectedSnippetIndex = 0
-                    return .handled
-                }
-                return .handled // Consume to prevent system beep at boundary
-            }
-            // When searching, let the arrow navigate cursor in search text field
-            return .ignored
-        }
-
-        // 4. LEFT ARROW (123) - Switch folder tab to the left (when not typing in search)
-        if keyCode == Self.keyLeftArrow {
-            if !isSearching {
-                if !folders.isEmpty && selectedFolderIndex > 0 {
-                    selectedFolderIndex -= 1
-                    selectedSnippetIndex = 0
-                    return .handled
-                }
-                return .handled // Consume to prevent system beep at boundary
-            }
-            // When searching, let the arrow navigate cursor in search text field
-            return .ignored
-        }
-
-        // 5. TAB (48) - Cycle to next folder tab
-        if keyCode == Self.keyTab {
-            if !isSearching && !folders.isEmpty {
-                selectedFolderIndex = (selectedFolderIndex + 1) % folders.count
+        // → Right Arrow — switch folder tab right (passthrough during search for text cursor)
+        case Self.keyRightArrow:
+            guard !isSearching else { return .ignored }
+            if selectedFolderIndex < folders.count - 1 {
+                selectedFolderIndex += 1
                 selectedSnippetIndex = 0
-                return .handled
             }
-            return .ignored
-        }
+            return .handled
 
-        // 6. RETURN / ENTER (36) - Insert snippet or enter folder
-        if keyCode == Self.keyReturn {
+        // ← Left Arrow — switch folder tab left (passthrough during search for text cursor)
+        case Self.keyLeftArrow:
+            guard !isSearching else { return .ignored }
+            if selectedFolderIndex > 0 {
+                selectedFolderIndex -= 1
+                selectedSnippetIndex = 0
+            }
+            return .handled
+
+        // ⇥ Tab — cycle to next folder
+        case Self.keyTab:
+            guard !isSearching, !folders.isEmpty else { return .ignored }
+            selectedFolderIndex = (selectedFolderIndex + 1) % folders.count
+            selectedSnippetIndex = 0
+            return .handled
+
+        // ↵ Return — insert snippet or open folder from search
+        case Self.keyReturn:
             if isSearching {
                 guard !searchResults.isEmpty else { return .handled }
-                let idx = max(0, min(selectedSearchResultIndex, searchResults.count - 1))
-                let item = searchResults[idx]
-                switch item {
+                let idx = min(selectedSearchResultIndex, searchResults.count - 1)
+                switch searchResults[idx] {
                 case .snippet(let snippet, _, _, _):
                     return .insertSnippet(snippet.content)
                 case .folder(let folder, _):
@@ -244,31 +193,27 @@ public final class QuickSnippetsNavigationState: ObservableObject {
             } else {
                 let snippets = currentFolderSnippets
                 guard !snippets.isEmpty else { return .handled }
-                let idx = max(0, min(selectedSnippetIndex, snippets.count - 1))
-                let snippet = snippets[idx]
-                return .insertSnippet(snippet.content)
+                let idx = min(selectedSnippetIndex, snippets.count - 1)
+                return .insertSnippet(snippets[idx].content)
             }
-        }
 
-        // 7. ESCAPE (53) - Clear search or dismiss overlay
-        if keyCode == Self.keyEscape {
+        // ⎋ Escape — clear search or close overlay
+        case Self.keyEscape:
             if isSearching {
                 searchText = ""
                 return .handled
             }
             return .closeOverlay
-        }
 
-        // 8. BACKSPACE / DELETE (51)
-        if keyCode == Self.keyDelete {
+        // ⌫ Delete — let text field handle during search, suppress beep when empty
+        case Self.keyDelete:
             if isSearching && !searchText.isEmpty {
-                return .ignored // Let text field delete characters
+                return .ignored
             }
-            // Prevent beep on backspace when text field is empty
             return .handled
-        }
 
-        // All other keys (letters, digits, punctuation, spaces) pass through to TextField
-        return .ignored
+        default:
+            return .ignored
+        }
     }
 }

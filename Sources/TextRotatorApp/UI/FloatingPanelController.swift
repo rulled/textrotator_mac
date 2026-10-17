@@ -5,23 +5,13 @@ import SwiftUI
 public final class CustomNonActivatingPanel: NSPanel {
     public var onKeyDown: ((NSEvent) -> Bool)?
 
-    override public var canBecomeKey: Bool {
-        return true
-    }
-
-    override public var canBecomeMain: Bool {
-        return true
-    }
-
-    override public func cancelOperation(_ sender: Any?) {
-        self.orderOut(sender)
-    }
+    override public var canBecomeKey: Bool { true }
+    override public var canBecomeMain: Bool { true }
 
     override public func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown {
-            if let onKeyDown = onKeyDown, onKeyDown(event) {
-                return
-            }
+        if event.type == .keyDown,
+           let handler = onKeyDown, handler(event) {
+            return
         }
         super.sendEvent(event)
     }
@@ -30,7 +20,11 @@ public final class CustomNonActivatingPanel: NSPanel {
 @MainActor
 public final class FloatingPanelController: NSObject, NSWindowDelegate {
     public let panel: CustomNonActivatingPanel
+    public var onClose: (() -> Void)?
+
     public var isVisible: Bool { panel.isVisible }
+    private var isPresenting = false
+    private var isClosing = false
 
     public init(title: String = "") {
         panel = CustomNonActivatingPanel(
@@ -67,18 +61,15 @@ public final class FloatingPanelController: NSObject, NSWindowDelegate {
 
         let visibleFrame = targetScreen.visibleFrame
 
-        // Default: display slightly to the right and below the cursor
         var x = mouseLocation.x + offsetX
         var y = mouseLocation.y - size.height - offsetY
 
-        // Bounds constraints: ensure it stays within the visible screen area
         if x + size.width > visibleFrame.maxX {
             x = mouseLocation.x - size.width - offsetX
         }
         if x < visibleFrame.minX {
             x = visibleFrame.minX + 8
         }
-
         if y < visibleFrame.minY {
             y = mouseLocation.y + offsetY
         }
@@ -90,30 +81,43 @@ public final class FloatingPanelController: NSObject, NSWindowDelegate {
     }
 
     public func show() {
+        guard !isClosing else { return }
+        isPresenting = true
         panel.alphaValue = 0.0
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        NSAnimationContext.runAnimationGroup { context in
+
+        NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.14
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1.0
+        }) { [weak self] in
+            Task { @MainActor in self?.isPresenting = false }
         }
     }
 
     public func close() {
+        guard isVisible, !isClosing else { return }
+        isClosing = true
+
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.10
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0.0
         }) { [weak self] in
-            DispatchQueue.main.async { [weak self] in
-                self?.panel.orderOut(nil)
-                self?.panel.alphaValue = 1.0
+            Task { @MainActor in
+                guard let self else { return }
+                self.panel.onKeyDown = nil
+                self.panel.orderOut(nil)
+                self.panel.alphaValue = 1.0
+                self.isClosing = false
+                self.onClose?()
             }
         }
     }
+
     public func windowDidResignKey(_ notification: Notification) {
-        // Auto-close on blur if needed
+        guard !isPresenting, !isClosing, isVisible else { return }
         close()
     }
 }

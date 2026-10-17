@@ -8,28 +8,22 @@ public struct QuickSnippetsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @FocusState private var isSearchFocused: Bool
 
-    public init(
-        coordinator: AppCoordinator,
-        navState: QuickSnippetsNavigationState? = nil
-    ) {
+    public init(coordinator: AppCoordinator, navState: QuickSnippetsNavigationState) {
         self.coordinator = coordinator
-        self.navState = navState ?? QuickSnippetsNavigationState(folders: coordinator.folders)
+        self.navState = navState
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Permanent Search Header Bar
             headerView
-
             Divider()
 
-            // Horizontal Folder Tabs Bar (Visible when not actively searching)
             if !navState.isSearching && !navState.folders.isEmpty {
                 folderTabsBar
+                    .animation(AppTheme.springFast, value: navState.selectedFolderIndex)
                 Divider()
             }
 
-            // Main Content Area: Instant Snippets List or Unified Search Results
             ZStack {
                 if navState.isSearching {
                     unifiedSearchResultsView
@@ -40,18 +34,15 @@ public struct QuickSnippetsView: View {
                 }
             }
             .frame(maxHeight: .infinity)
+            .animation(AppTheme.springFast, value: navState.isSearching)
 
             Divider()
-
-            // Bottom Navigation Hints Bar
             footerHintsBar
         }
         .frame(width: 440, height: 350)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.panelRadius, style: .continuous))
         .overlay(AppTheme.panelBackgroundStroke(for: colorScheme))
-        .animation(AppTheme.springFast, value: navState.selectedFolderIndex)
-        .animation(AppTheme.springFast, value: navState.isSearching)
         .onAppear {
             navState.folders = coordinator.folders
             isSearchFocused = true
@@ -61,7 +52,7 @@ public struct QuickSnippetsView: View {
         }
     }
 
-    // MARK: - Permanent Search Header View
+    // MARK: - Header
 
     private var headerView: some View {
         HStack(spacing: 8) {
@@ -86,32 +77,27 @@ public struct QuickSnippetsView: View {
                 .accessibilityLabel("Очистить поиск")
             }
 
-            closeButton
+            Button {
+                coordinator.quickSnippetsPanel?.close()
+            } label: {
+                Text("esc")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.15))
+                    .cornerRadius(AppTheme.badgeRadius)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Закрыть (Escape)")
+            .accessibilityLabel("Закрыть")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
     }
 
-    private var closeButton: some View {
-        Button {
-            coordinator.quickSnippetsPanel?.close()
-            coordinator.restoreForegroundApp()
-        } label: {
-            Text("esc")
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(Color.secondary.opacity(0.15))
-                .cornerRadius(AppTheme.badgeRadius)
-                .foregroundColor(.secondary)
-        }
-        .buttonStyle(.plain)
-        .help("Закрыть (Escape)")
-        .accessibilityLabel("Закрыть")
-    }
-
-    // MARK: - Horizontal Folder Tabs Bar
+    // MARK: - Folder Tabs
 
     private var folderTabsBar: some View {
         ScrollViewReader { tabProxy in
@@ -168,16 +154,13 @@ public struct QuickSnippetsView: View {
         .background(Color(NSColor.windowBackgroundColor).opacity(0.4))
     }
 
-    // MARK: - Current Folder Snippets List View (Instant Display)
+    // MARK: - Snippets List
 
     private var currentFolderSnippetsListView: some View {
         Group {
             let snippets = navState.currentFolderSnippets
             if snippets.isEmpty {
-                emptyPlaceholder(
-                    icon: "doc.text",
-                    message: "В этой папке пока нет сниппетов"
-                )
+                emptyPlaceholder(icon: "doc.text", message: "В этой папке пока нет сниппетов")
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -187,27 +170,7 @@ public struct QuickSnippetsView: View {
                                 Button {
                                     insertSnippet(snippet.content)
                                 } label: {
-                                    HStack(alignment: .top, spacing: 8) {
-                                        Image(systemName: "text.quote")
-                                            .foregroundColor(isSelected ? .accentColor : .secondary)
-                                            .font(.system(size: 12))
-                                            .padding(.top, 2)
-
-                                        Text(snippet.content)
-                                            .font(.system(size: 12.5))
-                                            .foregroundColor(isSelected ? .primary : .primary.opacity(0.9))
-                                            .lineLimit(2)
-                                            .multilineTextAlignment(.leading)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 7)
-                                    .background(
-                                        isSelected
-                                            ? Color.accentColor.opacity(0.18)
-                                            : Color.clear
-                                    )
-                                    .cornerRadius(AppTheme.pillRadius)
+                                    snippetRow(content: snippet.content, isSelected: isSelected)
                                 }
                                 .buttonStyle(LiteRowButtonStyle())
                                 .id(index)
@@ -227,7 +190,7 @@ public struct QuickSnippetsView: View {
         }
     }
 
-    // MARK: - Unified Search Results View
+    // MARK: - Search Results
 
     private var unifiedSearchResultsView: some View {
         Group {
@@ -242,66 +205,11 @@ public struct QuickSnippetsView: View {
                                 Button {
                                     executeSearchItem(item)
                                 } label: {
-                                    HStack(spacing: 8) {
-                                        switch item {
-                                        case .folder(let folder, _):
-                                            Image(systemName: isSelected ? "folder.fill" : "folder")
-                                                .foregroundColor(isSelected ? .accentColor : .secondary)
-                                                .font(.system(size: 13))
-
-                                            Text(folder.name)
-                                                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                                                .foregroundColor(.primary)
-                                                .lineLimit(1)
-
-                                            Spacer()
-
-                                            HStack(spacing: 3) {
-                                                Text("Папка")
-                                                    .font(.system(size: 10, weight: .medium))
-                                                Image(systemName: "chevron.right")
-                                                    .font(.system(size: 9, weight: .semibold))
-                                            }
-                                            .foregroundColor(.secondary)
-                                            .padding(.horizontal, 5)
-                                            .padding(.vertical, 1.5)
-                                            .background(Color.secondary.opacity(0.1))
-                                            .cornerRadius(AppTheme.badgeRadius)
-
-                                        case .snippet(let snippet, let folderName, _, _):
-                                            Image(systemName: "text.quote")
-                                                .foregroundColor(isSelected ? .accentColor : .secondary)
-                                                .font(.system(size: 12))
-
-                                            Text(snippet.content)
-                                                .font(.system(size: 12.5))
-                                                .foregroundColor(isSelected ? .primary : .primary.opacity(0.9))
-                                                .lineLimit(2)
-                                                .multilineTextAlignment(.leading)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                                            if !folderName.isEmpty {
-                                                Text("📁 \(folderName)")
-                                                    .font(.system(size: 10, weight: .medium))
-                                                    .foregroundColor(.secondary)
-                                                    .padding(.horizontal, 5)
-                                                    .padding(.vertical, 1.5)
-                                                    .background(Color.secondary.opacity(0.1))
-                                                    .cornerRadius(AppTheme.badgeRadius)
-                                            }
-                                        }
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 7)
-                                    .background(
-                                        isSelected
-                                            ? Color.accentColor.opacity(0.18)
-                                            : Color.clear
-                                    )
-                                    .cornerRadius(AppTheme.pillRadius)
+                                    searchResultRow(item: item, isSelected: isSelected)
                                 }
                                 .buttonStyle(LiteRowButtonStyle())
                                 .id(index)
+                                .accessibilityLabel(searchResultAccessibilityLabel(item))
                             }
                         }
                         .padding(6)
@@ -316,7 +224,96 @@ public struct QuickSnippetsView: View {
         }
     }
 
-    // MARK: - Footer Hints Bar
+    // MARK: - Row Builders
+
+    private func snippetRow(content: String, isSelected: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "text.quote")
+                .foregroundColor(isSelected ? .accentColor : .secondary)
+                .font(.system(size: 12))
+                .padding(.top, 2)
+
+            Text(content)
+                .font(.system(size: 12.5))
+                .foregroundColor(isSelected ? .primary : .primary.opacity(0.9))
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+        .cornerRadius(AppTheme.pillRadius)
+    }
+
+    @ViewBuilder
+    private func searchResultRow(item: SmartSearchItem, isSelected: Bool) -> some View {
+        HStack(spacing: 8) {
+            switch item {
+            case .folder(let folder, _):
+                Image(systemName: isSelected ? "folder.fill" : "folder")
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                    .font(.system(size: 13))
+
+                Text(folder.name)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                HStack(spacing: 3) {
+                    Text("Папка")
+                        .font(.system(size: 10, weight: .medium))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(AppTheme.badgeRadius)
+
+            case .snippet(let snippet, let folderName, _, _):
+                Image(systemName: "text.quote")
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                    .font(.system(size: 12))
+
+                Text(snippet.content)
+                    .font(.system(size: 12.5))
+                    .foregroundColor(isSelected ? .primary : .primary.opacity(0.9))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !folderName.isEmpty {
+                    Text("📁 \(folderName)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color.secondary.opacity(0.1))
+                        .cornerRadius(AppTheme.badgeRadius)
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+        .cornerRadius(AppTheme.pillRadius)
+    }
+
+    private func searchResultAccessibilityLabel(_ item: SmartSearchItem) -> String {
+        switch item {
+        case .folder(let folder, _):
+            return "Папка \(folder.name)"
+        case .snippet(let snippet, let folderName, _, _):
+            let prefix = folderName.isEmpty ? "" : "из \(folderName): "
+            return "Сниппет: \(prefix)\(snippet.content)"
+        }
+    }
+
+    // MARK: - Footer
 
     private var footerHintsBar: some View {
         HStack(spacing: 12) {
@@ -352,7 +349,7 @@ public struct QuickSnippetsView: View {
         }
     }
 
-    // MARK: - Empty State Placeholder
+    // MARK: - Empty State
 
     private func emptyPlaceholder(icon: String, message: String) -> some View {
         VStack(spacing: 8) {
@@ -360,7 +357,6 @@ public struct QuickSnippetsView: View {
             Image(systemName: icon)
                 .font(.system(size: 26))
                 .foregroundColor(.secondary.opacity(0.5))
-
             Text(message)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.secondary)
@@ -386,7 +382,7 @@ public struct QuickSnippetsView: View {
     }
 }
 
-// MARK: - Minimalist Row Button Style with Instant Press Scale
+// MARK: - Row Button Style
 
 private struct LiteRowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
