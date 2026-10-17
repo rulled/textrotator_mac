@@ -24,12 +24,16 @@ struct TextRotatorApp {
     static func main() async {
         let args = CommandLine.arguments
 
+        if args.contains("-h") || args.contains("--help") {
+            printUsage()
+            exit(0)
+        }
+
         if args.contains("--smoke-test") {
             await runSmokeTest()
             exit(0)
         }
 
-        print("🚀 TextRotator macOS Daemon Starting...")
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory) // Menu Bar agent (LSUIElement behavior, no Dock icon)
 
@@ -37,8 +41,35 @@ struct TextRotatorApp {
         let statusBar = StatusBarController(coordinator: coordinator)
         _ = statusBar
 
-        print("✅ Core systems initialized. TextRotator running in Menu Bar.")
+        if args.contains("--quick") {
+            await coordinator.toggleQuickSnippetsOverlay()
+        } else if args.contains("--translate") {
+            await coordinator.showTranslatorOverlay()
+        } else if args.contains("--instant") {
+            await coordinator.performInstantTranslateAndReplace()
+        } else if args.contains("--manager") {
+            WindowManager.shared.openManagerWindow(coordinator: coordinator)
+        } else {
+            print("🚀 TextRotator macOS Daemon Starting...")
+            print("✅ Core systems initialized. TextRotator running in Menu Bar.")
+        }
+
         app.run()
+    }
+
+    private static func printUsage() {
+        print("""
+        TextRotator macOS (Native Apple Silicon)
+        
+        Usage:
+          TextRotator                Run as background Menu Bar daemon (default)
+          TextRotator --quick        Open Quick Snippets Overlay at cursor (F3)
+          TextRotator --translate    Open Translator Card Overlay at cursor (F4)
+          TextRotator --instant      Trigger Instant Translate & Replace in-place (F1)
+          TextRotator --manager      Open Snippets Manager Window (Cmd+,)
+          TextRotator --smoke-test   Run automated end-to-end live smoke test
+          TextRotator --help, -h     Show this help screen
+        """)
     }
 
     private static func runSmokeTest() async {
