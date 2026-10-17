@@ -7,23 +7,32 @@ public struct SnippetsManagerView: View {
 
     @State private var selectedFolderId: Int64?
     @State private var searchText: String = ""
+
+    // Folder Actions State
     @State private var isAddingFolder: Bool = false
     @State private var newFolderName: String = ""
-    @State private var editingSnippet: SnippetItem?
-    @State private var newSnippetContent: String = ""
-    @State private var isAddingSnippet: Bool = false
-    @State private var renamingFolder: FolderWithSnippets?
-    @State private var renameFolderName: String = ""
+    @State private var editingFolderId: Int64?
+    @State private var editingFolderName: String = ""
     @State private var folderPendingDeletion: FolderWithSnippets?
+    @FocusState private var isFolderRenameFocused: Bool
+
+    // Snippet Inline Actions State
+    @State private var isAddingSnippet: Bool = false
+    @State private var newSnippetContent: String = ""
+    @State private var editingSnippetId: Int64?
+    @State private var editingSnippetText: String = ""
+    @FocusState private var isSnippetEditFocused: Bool
 
     public init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
-        _selectedFolderId = State(initialValue: coordinator.folders.first?.id)
+        if let first = coordinator.folders.first {
+            _selectedFolderId = State(initialValue: first.id)
+        }
     }
 
     private var selectedFolder: FolderWithSnippets? {
         if let id = selectedFolderId {
-            return coordinator.folders.first { $0.id == id }
+            return coordinator.folders.first(where: { $0.id == id }) ?? coordinator.folders.first
         }
         return coordinator.folders.first
     }
@@ -39,146 +48,11 @@ public struct SnippetsManagerView: View {
 
     public var body: some View {
         NavigationSplitView {
-            // MARK: - Folders Sidebar
-            List(selection: $selectedFolderId) {
-                Section("Папки") {
-                    ForEach(coordinator.folders) { folder in
-                        NavigationLink(value: folder.id) {
-                            Label(folder.name, systemImage: "folder")
-                                .font(.system(size: 13))
-                        }
-                        .contextMenu {
-                            Button("Переименовать...") {
-                                renamingFolder = folder
-                                renameFolderName = folder.name
-                            }
-                            Divider()
-                            Button("Удалить папку...", role: .destructive) {
-                                folderPendingDeletion = folder
-                            }
-                        }
-                    }
-                }
-            }
-            .listStyle(.sidebar)
-            .navigationTitle("Папки")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        newFolderName = ""
-                        isAddingFolder = true
-                    } label: {
-                        Image(systemName: "folder.badge.plus")
-                    }
-                    .help("Создать папку")
-                    .accessibilityLabel("Создать новую папку")
-                }
-            }
+            sidebarContent
         } detail: {
-            // MARK: - Snippets Detail View
-            if let folder = selectedFolder {
-                VStack(spacing: 0) {
-                    // Header Toolbar
-                    HStack(spacing: 12) {
-                        Text(folder.name)
-                            .font(.system(size: 18, weight: .bold))
-
-                        Spacer()
-
-                        // Add Snippet Button
-                        Button {
-                            newSnippetContent = ""
-                            isAddingSnippet = true
-                        } label: {
-                            Label("Добавить сниппет", systemImage: "plus")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.regular)
-                        .help("Создать новый сниппет (Cmd+N)")
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(NSColor.windowBackgroundColor))
-
-                    Divider()
-
-                    // Snippets List or Native ContentUnavailableView
-                    if filteredSnippets.isEmpty {
-                        if !searchText.isEmpty {
-                            ContentUnavailableView.search(text: searchText)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        } else {
-                            ContentUnavailableView {
-                                Label("В этой папке пока нет сниппетов", systemImage: "doc.text")
-                            } description: {
-                                Text("Создайте первый сниппет для быстрого доступа по хоткею.")
-                            } actions: {
-                                Button("Создать сниппет") {
-                                    newSnippetContent = ""
-                                    isAddingSnippet = true
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                    } else {
-                        List {
-                            ForEach(Array(filteredSnippets.enumerated()), id: \.element.id) { index, snippet in
-                                SnippetDetailRow(
-                                    snippet: snippet,
-                                    index: index,
-                                    onEdit: {
-                                        editingSnippet = snippet
-                                    },
-                                    onDelete: {
-                                        deleteSnippet(snippet)
-                                    },
-                                    onCopy: {
-                                        NSPasteboard.general.clearContents()
-                                        NSPasteboard.general.setString(snippet.content, forType: .string)
-                                        AppTheme.hapticSuccess()
-                                    }
-                                )
-                            }
-                        }
-                        .listStyle(.inset)
-                    }
-
-                    Divider()
-
-                    // System Info / Status Footer
-                    HStack {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(coordinator.textIO.isAccessibilityGranted() ? Color.green : Color.orange)
-                                .frame(width: 8, height: 8)
-                            Text(coordinator.textIO.isAccessibilityGranted() ? "Accessibility активен" : "Accessibility не разрешен")
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
-                        }
-
-                        Spacer()
-
-                        HStack(spacing: 12) {
-                            Text("F1: Мгновенный перевод")
-                            Text("F3: Панель сниппетов")
-                            Text("F4: Переводчик")
-                        }
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                }
-                .searchable(text: $searchText, placement: .toolbar, prompt: "Поиск по тексту...")
-            } else {
-                ContentUnavailableView("Папка не выбрана", systemImage: "folder", description: Text("Выберите папку из списка слева или создайте новую."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            detailContent
         }
         .frame(minWidth: 720, minHeight: 460)
-        // Confirmation Dialog: Delete Folder (Resolves HIGH trigger)
         .confirmationDialog(
             "Удалить папку «\(folderPendingDeletion?.name ?? "")»?",
             isPresented: Binding(
@@ -197,107 +71,415 @@ public struct SnippetsManagerView: View {
                 folderPendingDeletion = nil
             }
         } message: {
-            Text("Все сниппеты в этой папке (\(folderPendingDeletion?.snippets.count ?? 0) шт.) будут безвозвратно удалены.")
+            Text("Все сниппеты в этой папке будут безвозвратно удалены.")
         }
-        // Dialog: Add Folder
         .sheet(isPresented: $isAddingFolder) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Новая папка")
-                    .font(.headline)
-
-                TextField("Название папки", text: $newFolderName)
-                    .textFieldStyle(.roundedBorder)
-
-                HStack {
-                    Spacer()
-                    Button("Отмена") {
-                        isAddingFolder = false
-                    }
-                    .keyboardShortcut(.cancelAction)
-
-                    Button("Создать") {
-                        createFolder()
-                    }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .padding(20)
-            .frame(width: 300)
+            addFolderSheet
         }
-        // Dialog: Rename Folder
-        .sheet(item: $renamingFolder) { folder in
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Переименовать папку")
-                    .font(.headline)
+    }
 
-                TextField("Новое название", text: $renameFolderName)
-                    .textFieldStyle(.roundedBorder)
+    // MARK: - Sidebar Content
 
-                HStack {
-                    Spacer()
-                    Button("Отмена") {
-                        renamingFolder = nil
-                    }
-                    .keyboardShortcut(.cancelAction)
-
-                    Button("Сохранить") {
-                        if !renameFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            try? coordinator.database.updateFolder(id: folder.id, name: renameFolderName)
-                            coordinator.reloadDatabaseData()
-                        }
-                        renamingFolder = nil
-                    }
-                    .keyboardShortcut(.defaultAction)
+    @ViewBuilder
+    private var sidebarContent: some View {
+        List(selection: $selectedFolderId) {
+            Section("Папки") {
+                ForEach(coordinator.folders) { folder in
+                    folderSidebarRow(folder: folder)
                 }
+                .onMove(perform: moveFolders)
             }
-            .padding(20)
-            .frame(width: 300)
         }
-        // Dialog: Add Snippet
-        .sheet(isPresented: $isAddingSnippet) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Новый сниппет")
-                    .font(.headline)
-
-                TextEditor(text: $newSnippetContent)
-                    .font(.system(size: 13))
-                    .frame(minHeight: 140)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                    )
-
-                HStack {
-                    Spacer()
-                    Button("Отмена") {
-                        isAddingSnippet = false
-                    }
-                    .keyboardShortcut(.cancelAction)
-
-                    Button("Добавить") {
-                        addSnippet()
-                    }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(newSnippetContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .listStyle(.sidebar)
+        .navigationTitle("Папки")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    newFolderName = ""
+                    isAddingFolder = true
+                } label: {
+                    Image(systemName: "folder.badge.plus")
                 }
-            }
-            .padding(20)
-            .frame(width: 440, height: 260)
-        }
-        // Dialog: Edit Snippet
-        .sheet(item: $editingSnippet) { snippet in
-            EditSnippetSheet(snippet: snippet) { updatedText in
-                try? coordinator.database.updateSnippet(id: snippet.id, content: updatedText)
-                coordinator.reloadDatabaseData()
-                editingSnippet = nil
-            } onCancel: {
-                editingSnippet = nil
+                .help("Создать папку")
+                .accessibilityLabel("Создать новую папку")
             }
         }
     }
 
+    // MARK: - Detail Content
+
+    @ViewBuilder
+    private var detailContent: some View {
+        if let folder = selectedFolder {
+            VStack(spacing: 0) {
+                detailHeaderToolbar
+                Divider()
+                snippetsListContainer(folder: folder)
+                Divider()
+                statusFooter
+            }
+            .searchable(text: $searchText, placement: .toolbar, prompt: "Поиск по тексту...")
+        } else {
+            ContentUnavailableView(
+                "Папка не выбрана",
+                systemImage: "folder",
+                description: Text("Выберите папку из списка слева или создайте новую.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // MARK: - Detail Header Toolbar (No duplicate folder title)
+
+    private var detailHeaderToolbar: some View {
+        HStack {
+            Spacer()
+
+            Button {
+                withAnimation(AppTheme.springFast) {
+                    isAddingSnippet = true
+                    newSnippetContent = ""
+                    editingSnippetId = nil
+                }
+            } label: {
+                Label("Добавить сниппет", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            .help("Создать новый сниппет (Cmd+N)")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    // MARK: - Snippets List Container
+
+    @ViewBuilder
+    private func snippetsListContainer(folder: FolderWithSnippets) -> some View {
+        if filteredSnippets.isEmpty && !isAddingSnippet {
+            if !searchText.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ContentUnavailableView {
+                    Label("В этой папке пока нет сниппетов", systemImage: "doc.text")
+                } description: {
+                    Text("Создайте первый сниппет для быстрого доступа по хоткею.")
+                } actions: {
+                    Button("Создать сниппет") {
+                        withAnimation(AppTheme.springFast) {
+                            isAddingSnippet = true
+                            newSnippetContent = ""
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        } else {
+            List {
+                if isAddingSnippet {
+                    inlineNewSnippetCard(folderId: folder.id)
+                }
+
+                ForEach(filteredSnippets) { snippet in
+                    if editingSnippetId == snippet.id {
+                        inlineSnippetEditor(snippet: snippet)
+                    } else {
+                        SnippetDetailRow(
+                            snippet: snippet,
+                            onEdit: {
+                                startEditingSnippet(snippet)
+                            },
+                            onDelete: {
+                                deleteSnippet(snippet)
+                            }
+                        )
+                    }
+                }
+                .onMove(perform: moveSnippets)
+            }
+            .listStyle(.inset)
+        }
+    }
+
+    // MARK: - Status Footer
+
+    private var statusFooter: some View {
+        HStack {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(coordinator.textIO.isAccessibilityGranted() ? Color.green : Color.orange)
+                    .frame(width: 8, height: 8)
+                Text(coordinator.textIO.isAccessibilityGranted() ? "Accessibility активен" : "Accessibility не разрешен")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            HStack(spacing: 12) {
+                Text("F1: Мгновенный перевод")
+                Text("F2: Перевод выделения")
+                Text("F3: Панель сниппетов")
+                Text("F4: Переводчик")
+            }
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+    }
+
+    // MARK: - Add Folder Sheet
+
+    private var addFolderSheet: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Новая папка")
+                .font(.headline)
+
+            TextField("Название папки...", text: $newFolderName)
+                .textFieldStyle(.roundedBorder)
+
+            HStack {
+                Spacer()
+                Button("Отмена") {
+                    isAddingFolder = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Создать") {
+                    createFolder()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
+    }
+
+    // MARK: - Folder Sidebar Row (with inline rename)
+
+    @ViewBuilder
+    private func folderSidebarRow(folder: FolderWithSnippets) -> some View {
+        if editingFolderId == folder.id {
+            HStack(spacing: 6) {
+                Image(systemName: "folder")
+                    .foregroundColor(.accentColor)
+                    .font(.system(size: 13))
+
+                TextField("Название папки", text: $editingFolderName)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .semibold))
+                    .focused($isFolderRenameFocused)
+                    .onSubmit {
+                        saveFolderName(folder: folder)
+                    }
+
+                Button {
+                    saveFolderName(folder: folder)
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.accentColor)
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .help("Сохранить имя")
+
+                Button {
+                    editingFolderId = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .help("Отмена")
+            }
+            .padding(.vertical, 2)
+            .onAppear {
+                isFolderRenameFocused = true
+            }
+        } else {
+            NavigationLink(value: folder.id) {
+                Label(folder.name, systemImage: "folder")
+                    .font(.system(size: 13))
+            }
+            .contextMenu {
+                Button("Переименовать...") {
+                    startRenamingFolder(folder)
+                }
+                Divider()
+                Button("Удалить папку...", role: .destructive) {
+                    folderPendingDeletion = folder
+                }
+            }
+        }
+    }
+
+    // MARK: - Inline New Snippet Creator Card
+
+    private func inlineNewSnippetCard(folderId: Int64) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Новый сниппет")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.accentColor)
+                Spacer()
+            }
+
+            TextEditor(text: $newSnippetContent)
+                .font(.system(size: 13))
+                .frame(minHeight: 70, maxHeight: 150)
+                .padding(6)
+                .background(Color(NSColor.textBackgroundColor))
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.accentColor.opacity(0.5), lineWidth: 1.2)
+                )
+
+            HStack {
+                Spacer()
+                Button("Отмена") {
+                    withAnimation(AppTheme.springFast) {
+                        isAddingSnippet = false
+                        newSnippetContent = ""
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+
+                Button("Добавить") {
+                    addSnippet()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(newSnippetContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(10)
+        .background(Color.accentColor.opacity(0.06))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Inline Snippet Editor Card (In-container editing)
+
+    private func inlineSnippetEditor(snippet: SnippetItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Редактирование сниппета", systemImage: "pencil")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.accentColor)
+                Spacer()
+            }
+
+            TextEditor(text: $editingSnippetText)
+                .font(.system(size: 13))
+                .frame(minHeight: 80, maxHeight: 180)
+                .padding(6)
+                .background(Color(NSColor.textBackgroundColor))
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.accentColor.opacity(0.7), lineWidth: 1.5)
+                )
+                .focused($isSnippetEditFocused)
+
+            HStack {
+                Spacer()
+                Button("Отмена") {
+                    withAnimation(AppTheme.springFast) {
+                        editingSnippetId = nil
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+
+                Button("Сохранить") {
+                    saveSnippetEdit(snippetId: snippet.id)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(editingSnippetText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(10)
+        .background(Color.accentColor.opacity(0.06))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+        )
+        .onAppear {
+            isSnippetEditFocused = true
+        }
+    }
+
     // MARK: - Actions
+
+    private func moveFolders(from source: IndexSet, to destination: Int) {
+        var reordered = coordinator.folders
+        reordered.move(fromOffsets: source, toOffset: destination)
+        let order = reordered.map(\.id)
+        do {
+            try coordinator.database.reorderFolders(order: order)
+            coordinator.reloadDatabaseData()
+            AppTheme.hapticClick()
+        } catch {
+            print("Failed to reorder folders: \(error)")
+        }
+    }
+
+    private func moveSnippets(from source: IndexSet, to destination: Int) {
+        guard let folder = selectedFolder, searchText.isEmpty else { return }
+        var reordered = folder.snippets
+        reordered.move(fromOffsets: source, toOffset: destination)
+        let order = reordered.map(\.id)
+        do {
+            try coordinator.database.reorderSnippets(folderId: folder.id, order: order)
+            coordinator.reloadDatabaseData()
+            AppTheme.hapticClick()
+        } catch {
+            print("Failed to reorder snippets: \(error)")
+        }
+    }
+
+    private func startRenamingFolder(_ folder: FolderWithSnippets) {
+        editingFolderName = folder.name
+        withAnimation(AppTheme.springFast) {
+            editingFolderId = folder.id
+        }
+    }
+
+    private func saveFolderName(folder: FolderWithSnippets) {
+        let trimmed = editingFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            editingFolderId = nil
+            return
+        }
+        do {
+            try coordinator.database.updateFolder(id: folder.id, name: trimmed)
+            coordinator.reloadDatabaseData()
+            AppTheme.hapticClick()
+        } catch {
+            print("Failed to update folder name: \(error)")
+        }
+        withAnimation(AppTheme.springFast) {
+            editingFolderId = nil
+        }
+    }
 
     private func createFolder() {
         let name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -326,6 +508,29 @@ public struct SnippetsManagerView: View {
         }
     }
 
+    private func startEditingSnippet(_ snippet: SnippetItem) {
+        editingSnippetText = snippet.content
+        withAnimation(AppTheme.springFast) {
+            isAddingSnippet = false
+            editingSnippetId = snippet.id
+        }
+    }
+
+    private func saveSnippetEdit(snippetId: Int64) {
+        let trimmed = editingSnippetText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try coordinator.database.updateSnippet(id: snippetId, content: trimmed)
+            coordinator.reloadDatabaseData()
+            AppTheme.hapticSuccess()
+        } catch {
+            print("Failed to update snippet: \(error)")
+        }
+        withAnimation(AppTheme.springFast) {
+            editingSnippetId = nil
+        }
+    }
+
     private func addSnippet() {
         guard let folder = selectedFolder else { return }
         let text = newSnippetContent.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -337,7 +542,10 @@ public struct SnippetsManagerView: View {
         } catch {
             print("Failed to create snippet: \(error)")
         }
-        isAddingSnippet = false
+        withAnimation(AppTheme.springFast) {
+            isAddingSnippet = false
+            newSnippetContent = ""
+        }
     }
 
     private func deleteSnippet(_ snippet: SnippetItem) {
@@ -351,49 +559,35 @@ public struct SnippetsManagerView: View {
     }
 }
 
-// MARK: - Snippet Detail Row
+// MARK: - Snippet Detail Row (without copy button)
 
 private struct SnippetDetailRow: View {
     let snippet: SnippetItem
-    let index: Int
     let onEdit: () -> Void
     let onDelete: () -> Void
-    let onCopy: () -> Void
 
     @State private var isHovered: Bool = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            // Index badge
-            Text("\(index + 1)")
-                .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
+            Image(systemName: "quote.bubble")
+                .font(.system(size: 11))
                 .foregroundColor(.secondary)
-                .frame(width: 22, height: 22)
-                .background(Color.secondary.opacity(0.1))
-                .cornerRadius(AppTheme.badgeRadius)
+                .padding(.top, 2)
 
-            // Content
             Text(snippet.content)
                 .font(.system(size: 13))
                 .lineLimit(4)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Actions
+            // Actions: Edit and Delete only (Copy button removed)
             HStack(spacing: 6) {
-                Button(action: onCopy) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 11))
-                }
-                .buttonStyle(.borderless)
-                .help("Скопировать в буфер обмена")
-                .accessibilityLabel("Скопировать сниппет")
-
                 Button(action: onEdit) {
                     Image(systemName: "pencil")
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.borderless)
-                .help("Редактировать текст")
+                .help("Редактировать текст на месте")
                 .accessibilityLabel("Редактировать сниппет")
 
                 Button(role: .destructive, action: onDelete) {
@@ -413,51 +607,5 @@ private struct SnippetDetailRow: View {
             isHovered = hovering
         }
         .help(snippet.content)
-    }
-}
-
-// MARK: - Edit Snippet Sheet
-
-private struct EditSnippetSheet: View {
-    let snippet: SnippetItem
-    let onSave: (String) -> Void
-    let onCancel: () -> Void
-
-    @State private var content: String
-
-    init(snippet: SnippetItem, onSave: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
-        self.snippet = snippet
-        self.onSave = onSave
-        self.onCancel = onCancel
-        _content = State(initialValue: snippet.content)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Редактирование сниппета")
-                .font(.headline)
-
-            TextEditor(text: $content)
-                .font(.system(size: 13))
-                .frame(minHeight: 140)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                )
-
-            HStack {
-                Spacer()
-                Button("Отмена", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-
-                Button("Сохранить") {
-                    onSave(content)
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(20)
-        .frame(width: 440, height: 260)
     }
 }
