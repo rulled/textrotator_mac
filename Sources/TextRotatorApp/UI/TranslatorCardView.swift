@@ -84,26 +84,9 @@ public struct TranslatorCardView: View {
                 .menuStyle(.borderlessButton)
                 .fixedSize()
                 .accessibilityLabel("Выбор сервиса перевода")
-
-                // Close Button
-                Button {
-                    coordinator.translatorPanel?.close()
-                    coordinator.restoreForegroundApp()
-                } label: {
-                    Text("esc")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.15))
-                        .cornerRadius(AppTheme.badgeRadius)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Закрыть окно (Escape)")
-                .accessibilityLabel("Закрыть")
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 9)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
 
             // Non-blocking Pulse Progress Indicator under header
@@ -114,38 +97,20 @@ public struct TranslatorCardView: View {
                 Divider()
             }
 
-            // MARK: - Source Text Box (Compact preview)
-            if !coordinator.translatorSourceText.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(coordinator.translatorSourceText)
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Color(NSColor.windowBackgroundColor).opacity(0.3))
-                .help(coordinator.translatorSourceText)
-
-                Divider()
-            }
-
-            // MARK: - Translation Result Text Area
+            // MARK: - Translation Result Area (Pure Translation Output)
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     if coordinator.translatorResultText.isEmpty && !coordinator.isTranslating {
-                        Text("Выделите текст в любом приложении для перевода")
+                        Text("Выделите текст для перевода")
                             .font(.system(size: 13))
                             .foregroundColor(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 10)
                     } else {
                         Text(coordinator.translatorResultText)
-                            .font(.system(size: 13, weight: .regular))
+                            .font(.system(size: 13.5, weight: .regular))
                             .foregroundColor(.primary)
-                            .lineSpacing(3)
+                            .lineSpacing(3.5)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -176,7 +141,7 @@ public struct TranslatorCardView: View {
                 }
                 .buttonStyle(SpringFeedbackButtonStyle())
                 .disabled(coordinator.translatorResultText.isEmpty)
-                .help("Скопировать перевод в буфер обмена (Cmd+C)")
+                .help("Скопировать перевод (Cmd+C)")
                 .accessibilityLabel("Скопировать перевод")
 
                 Spacer()
@@ -204,7 +169,7 @@ public struct TranslatorCardView: View {
             .padding(.vertical, 8)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
         }
-        .frame(width: 420, height: 260)
+        .frame(width: 380, height: 210)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.panelRadius, style: .continuous))
         .overlay(AppTheme.panelBackgroundStroke(for: colorScheme))
@@ -212,8 +177,7 @@ public struct TranslatorCardView: View {
             if keyPress.key == .return {
                 insertTranslation()
                 return .handled
-            }
-            if keyPress.key == .escape {
+            } else if keyPress.key == .escape {
                 coordinator.translatorPanel?.close()
                 coordinator.restoreForegroundApp()
                 return .handled
@@ -237,6 +201,7 @@ public struct TranslatorCardView: View {
         if !coordinator.translatorResultText.isEmpty {
             let nextSource = coordinator.translatorResultText
             coordinator.translatorSourceText = nextSource
+            coordinator.translatorResultText = ""
             Task {
                 await coordinator.requestTranslation(text: nextSource)
             }
@@ -244,8 +209,9 @@ public struct TranslatorCardView: View {
     }
 
     private func switchProvider(to providerName: String) {
-        coordinator.activeProviderName = providerName
+        guard providerName != coordinator.activeProviderName else { return }
         AppTheme.hapticClick()
+        coordinator.activeProviderName = providerName
 
         if !coordinator.translatorSourceText.isEmpty {
             Task {
@@ -259,16 +225,18 @@ public struct TranslatorCardView: View {
 
     private func copyTranslation() {
         guard !coordinator.translatorResultText.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(coordinator.translatorResultText, forType: .string)
-
         AppTheme.hapticSuccess()
+
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(coordinator.translatorResultText, forType: .string)
+
         withAnimation(AppTheme.springFast) {
             copiedFeedback = true
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             withAnimation(AppTheme.springFast) {
-                copiedFeedback = false
+                self.copiedFeedback = false
             }
         }
     }
@@ -286,34 +254,40 @@ private struct LinearProgressPulse: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let width = proxy.size.width
             Rectangle()
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.accentColor.opacity(0.2),
+                            Color.clear,
+                            Color.accentColor.opacity(0.85),
                             Color.accentColor,
-                            Color.accentColor.opacity(0.2)
+                            Color.accentColor.opacity(0.85),
+                            Color.clear
                         ],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 )
-                .frame(width: proxy.size.width * 0.4)
-                .offset(x: phase * proxy.size.width * 0.7)
-                .onAppear {
-                    withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                        phase = 1.0
-                    }
-                }
+                .frame(width: width * 0.4, height: 2)
+                .offset(x: -width * 0.4 + phase * (width * 1.4))
         }
         .clipped()
+        .onAppear {
+            withAnimation(
+                .easeInOut(duration: 0.9)
+                .repeatForever(autoreverses: false)
+            ) {
+                phase = 1.0
+            }
+        }
     }
 }
 
 private struct SpringFeedbackButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
             .animation(AppTheme.springFast, value: configuration.isPressed)
     }
 }

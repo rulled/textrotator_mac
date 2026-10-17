@@ -18,6 +18,13 @@ public final class AppCoordinator: ObservableObject {
 
     // Remembered target application before overlay popped up
     private var lastExternalApp: NSRunningApplication?
+    // Micro-indicator for F1 instant translation
+    private let translationIndicator = TranslationIndicatorController()
+
+    // Cursor Translate Mode (Feature 4: Auto-translate on mouse selection release)
+    @Published public var isCursorTranslateEnabled: Bool = false
+    private var cursorWatcher: CursorSelectionWatcher?
+
 
     // State for Overlays
     @Published public var folders: [FolderWithSnippets] = []
@@ -72,7 +79,7 @@ public final class AppCoordinator: ObservableObject {
         case .translatorOverlay:
             await showTranslatorOverlay()
         case .cursorTranslateToggle:
-            print("Cursor translate toggle requested")
+            toggleCursorTranslateMode()
         }
     }
 
@@ -105,9 +112,16 @@ public final class AppCoordinator: ObservableObject {
             return
         }
 
+        // Show micro-indicator near cursor during translation
+        translationIndicator.showNearCursor()
+        defer {
+            translationIndicator.dismiss()
+        }
+
         let request = TranslationRequest(text: selectedText)
         do {
             let result = try await translationRouter.translateWithFallback(request: request)
+            translationIndicator.dismiss()
             restoreForegroundApp()
             NSApp.deactivate()
             // Delay to ensure target app has focus
@@ -181,7 +195,7 @@ public final class AppCoordinator: ObservableObject {
 
     // MARK: - Translator Overlay (F4)
 
-    public func showTranslatorOverlay() async {
+    public func showTranslatorOverlay(text: String? = nil) async {
         if translatorPanel?.isVisible == true {
             translatorPanel?.close()
             return
@@ -189,15 +203,21 @@ public final class AppCoordinator: ObservableObject {
 
         rememberForegroundApp()
 
-        let captured = await textIO.captureSelectedText() ?? ""
+        let captured: String
+        if let text {
+            captured = text
+        } else {
+            captured = await textIO.captureSelectedText() ?? ""
+        }
         self.translatorSourceText = captured
         self.translatorResultText = ""
         self.isTranslating = true
 
+        let cardSize = NSSize(width: 380, height: 210)
         let panel = FloatingPanelController(title: "Translator")
         let view = TranslatorCardView(coordinator: self)
-        panel.setContent(view: view, size: NSSize(width: 420, height: 260))
-        panel.positionNearCursor(size: NSSize(width: 420, height: 260))
+        panel.setContent(view: view, size: cardSize)
+        panel.positionNearCursor(size: cardSize)
 
         panel.onClose = { [weak self] in
             self?.translatorPanel = nil
@@ -211,6 +231,23 @@ public final class AppCoordinator: ObservableObject {
             await requestTranslation(text: captured)
         } else {
             self.isTranslating = false
+        }
+    }
+
+    public func toggleCursorTranslateMode() {
+        isCursorTranslateEnabled.toggle()
+        if isCursorTranslateEnabled {
+            if cursorWatcher == nil {
+                cursorWatcher = CursorSelectionWatcher(textIO: textIO) { [weak self] selectedText in
+                    guard let self else { return }
+                    Task {
+                        await self.showTranslatorOverlay(text: selectedText)
+                    }
+                }
+            }
+            cursorWatcher?.start()
+        } else {
+            cursorWatcher?.stop()
         }
     }
 

@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-public final class StatusBarController: NSObject {
+public final class StatusBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private let coordinator: AppCoordinator
 
@@ -30,59 +30,34 @@ public final class StatusBarController: NSObject {
 
     public func buildMenu() {
         let menu = NSMenu()
+        menu.delegate = self
 
-        // 1. Actions
-        let snippetsItem = NSMenuItem(
-            title: "Быстрые шаблоны (F3)",
-            action: #selector(openQuickSnippets),
-            keyEquivalent: ""
-        )
-        snippetsItem.target = self
-        menu.addItem(snippetsItem)
-
-        let instantItem = NSMenuItem(
-            title: "Мгновенный перевод (F1)",
-            action: #selector(instantTranslate),
-            keyEquivalent: ""
-        )
-        instantItem.target = self
-        menu.addItem(instantItem)
-
-        let translatorItem = NSMenuItem(
-            title: "Оверлей переводчика (F4)",
-            action: #selector(openTranslator),
-            keyEquivalent: ""
-        )
-        translatorItem.target = self
-        menu.addItem(translatorItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // 2. Main Window
+        // 1. Open Window / Manager
         let managerItem = NSMenuItem(
-            title: "Менеджер сниппетов...",
+            title: "Показать окно менеджера...",
             action: #selector(openManagerWindow),
             keyEquivalent: ","
         )
         managerItem.target = self
         menu.addItem(managerItem)
 
-        // 3. Accessibility status
-        let isTrusted = coordinator.textIO.isAccessibilityGranted()
-        let permTitle = isTrusted ? "✓ Доступ Accessibility: Разрешен" : "⚠️ Требуется доступ Accessibility..."
-        let permItem = NSMenuItem(
-            title: permTitle,
-            action: isTrusted ? nil : #selector(requestAccessibility),
+        menu.addItem(NSMenuItem.separator())
+
+        // 2. Cursor Translate Toggle
+        let cursorTranslateItem = NSMenuItem(
+            title: "Автоперевод при выделении (F2)",
+            action: #selector(toggleCursorTranslate),
             keyEquivalent: ""
         )
-        permItem.target = self
-        menu.addItem(permItem)
+        cursorTranslateItem.target = self
+        cursorTranslateItem.state = coordinator.isCursorTranslateEnabled ? .on : .off
+        menu.addItem(cursorTranslateItem)
 
         menu.addItem(NSMenuItem.separator())
 
-        // 4. Quit
+        // 3. Quit
         let quitItem = NSMenuItem(
-            title: "Завершить TextRotator",
+            title: "Завершить программу",
             action: #selector(quitApp),
             keyEquivalent: "q"
         )
@@ -92,30 +67,18 @@ public final class StatusBarController: NSObject {
         statusItem?.menu = menu
     }
 
-    @objc private func openQuickSnippets() {
-        Task {
-            await coordinator.toggleQuickSnippetsOverlay()
-        }
-    }
-
-    @objc private func instantTranslate() {
-        Task {
-            await coordinator.performInstantTranslateAndReplace()
-        }
-    }
-
-    @objc private func openTranslator() {
-        Task {
-            await coordinator.showTranslatorOverlay()
-        }
+    public func menuWillOpen(_ menu: NSMenu) {
+        // Refresh checkmark state when user clicks the menu item
+        buildMenu()
     }
 
     @objc private func openManagerWindow() {
         WindowManager.shared.openManagerWindow(coordinator: coordinator)
     }
 
-    @objc private func requestAccessibility() {
-        coordinator.textIO.promptAccessibilityPermission()
+    @objc private func toggleCursorTranslate() {
+        coordinator.toggleCursorTranslateMode()
+        buildMenu()
     }
 
     @objc private func quitApp() {
