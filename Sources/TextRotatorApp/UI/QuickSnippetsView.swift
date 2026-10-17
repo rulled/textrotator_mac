@@ -36,10 +36,10 @@ public struct QuickSnippetsView: View {
     /// Snippets displayed when inside a folder (filtered if search text present)
     private var displayedFolderSnippets: [SnippetItem] {
         guard let folder = activeFolder else { return [] }
-        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty {
             return folder.snippets
         }
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         return folder.snippets.filter { snippet in
             SmartSearchEngine.calculateScore(query: query, candidate: snippet.content) > 0
         }
@@ -49,7 +49,7 @@ public struct QuickSnippetsView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Header
+            // Permanent Header Bar
             headerView
 
             Divider()
@@ -90,116 +90,81 @@ public struct QuickSnippetsView: View {
         .animation(AppTheme.springFast, value: isSearching)
         .onAppear {
             isSearchFocused = true
+            setupPanelKeyInterception()
         }
-        .onKeyPress { keyPress in
-            handleKeyPress(keyPress)
+        .onDisappear {
+            teardownPanelKeyInterception()
         }
     }
 
-    // MARK: - Header View
+    // MARK: - Permanent Unified Header View
 
-    @ViewBuilder
     private var headerView: some View {
-        if let folder = activeFolder {
-            // Level 2 Header: Back button + Folder title
-            HStack(spacing: 8) {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+                .font(.system(size: 13, weight: .medium))
+
+            // If inside a folder: show interactive Breadcrumb Pill
+            if let folder = activeFolder {
                 Button {
                     backToRoot()
                 } label: {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("Папки")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 10, weight: .bold))
+                        Text(folder.name)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .lineLimit(1)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.secondary)
                     }
                     .foregroundColor(.accentColor)
                     .padding(.horizontal, 7)
-                    .padding(.vertical, 3.5)
-                    .background(Color.accentColor.opacity(0.12))
+                    .padding(.vertical, 3)
+                    .background(Color.accentColor.opacity(0.14))
                     .cornerRadius(AppTheme.pillRadius)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Назад к списку папок")
-
-                Text(folder.name)
-                    .font(.system(size: 13, weight: .bold))
-                    .lineLimit(1)
-                    .foregroundColor(.primary)
-
-                Spacer()
-
-                searchField
-
-                closeButton
+                .help("Вернуться к списку папок (← или Escape)")
+                .accessibilityLabel("Папка \(folder.name), нажать для возврата к списку папок")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
-        } else {
-            // Level 1 / Search Header: Search Bar
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 13, weight: .medium))
 
-                TextField("Умный поиск по папкам и текстам...", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .focused($isSearchFocused)
-                    .onChange(of: searchText) { _, _ in
-                        selectedSearchResultIndex = 0
-                        selectedFolderIndex = 0
-                        selectedSnippetIndex = 0
-                    }
-
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                        selectedSearchResultIndex = 0
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                            .font(.system(size: 12))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Очистить поиск")
-                }
-
-                closeButton
+            // Single Permanent Focused TextField (Never unmounted -> Focus Never Lost)
+            TextField(
+                activeFolder == nil
+                    ? "Умный поиск по папкам и текстам..."
+                    : "Поиск в папке...",
+                text: $searchText
+            )
+            .textFieldStyle(.plain)
+            .font(.system(size: 13))
+            .focused($isSearchFocused)
+            .onChange(of: searchText) { _, _ in
+                selectedSearchResultIndex = 0
+                selectedSnippetIndex = 0
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
-        }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-                .font(.system(size: 10))
-
-            TextField("Поиск...", text: $searchText)
-                .textFieldStyle(.plain)
-                .font(.system(size: 11.5))
-                .focused($isSearchFocused)
-                .frame(width: 90)
 
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
+                    selectedSearchResultIndex = 0
+                    selectedSnippetIndex = 0
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.secondary)
-                        .font(.system(size: 10))
+                        .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Очистить поиск")
             }
+
+            closeButton
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-        .cornerRadius(AppTheme.badgeRadius)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
     }
 
     private var closeButton: some View {
@@ -446,129 +411,144 @@ public struct QuickSnippetsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Keyboard Handling
+    // MARK: - Panel-Level Window Keyboard Interception
 
-    private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
-        if activeFolder == nil {
-            if isSearching {
-                // NAVIGATION IN UNIFIED SEARCH RESULTS
-                switch keyPress.key {
-                case .downArrow:
-                    if !searchResults.isEmpty && selectedSearchResultIndex < searchResults.count - 1 {
-                        selectedSearchResultIndex += 1
-                        AppTheme.hapticClick()
-                    }
-                    return .handled
+    private func setupPanelKeyInterception() {
+        guard let panel = coordinator.quickSnippetsPanel?.panel else { return }
 
-                case .upArrow:
-                    if selectedSearchResultIndex > 0 {
-                        selectedSearchResultIndex -= 1
-                        AppTheme.hapticClick()
-                    }
-                    return .handled
+        panel.onKeyDown = { [self] event in
+            return self.handleKeyDownEvent(event)
+        }
+    }
 
-                case .return:
-                    if !searchResults.isEmpty {
-                        let idx = max(0, min(selectedSearchResultIndex, searchResults.count - 1))
-                        executeSearchItem(searchResults[idx])
-                    }
-                    return .handled
+    private func teardownPanelKeyInterception() {
+        coordinator.quickSnippetsPanel?.panel.onKeyDown = nil
+    }
 
-                case .rightArrow:
-                    if !searchResults.isEmpty {
-                        let idx = max(0, min(selectedSearchResultIndex, searchResults.count - 1))
-                        if case .folder(let folder, _) = searchResults[idx] {
-                            openFolder(folder)
-                            return .handled
-                        }
-                    }
-                    return .ignored
+    private func handleKeyDownEvent(_ event: NSEvent) -> Bool {
+        let keyCode = event.keyCode
 
-                case .escape:
-                    if !searchText.isEmpty {
-                        searchText = ""
-                        selectedSearchResultIndex = 0
-                    } else {
-                        coordinator.quickSnippetsPanel?.close()
-                        coordinator.restoreForegroundApp()
-                    }
-                    return .handled
-
-                default:
-                    return .ignored
-                }
-            } else {
-                // NAVIGATION IN ROOT FOLDERS
-                switch keyPress.key {
-                case .downArrow:
-                    if !coordinator.folders.isEmpty && selectedFolderIndex < coordinator.folders.count - 1 {
-                        selectedFolderIndex += 1
-                        AppTheme.hapticClick()
-                    }
-                    return .handled
-
-                case .upArrow:
-                    if selectedFolderIndex > 0 {
-                        selectedFolderIndex -= 1
-                        AppTheme.hapticClick()
-                    }
-                    return .handled
-
-                case .rightArrow, .return:
-                    if !coordinator.folders.isEmpty {
-                        let idx = max(0, min(selectedFolderIndex, coordinator.folders.count - 1))
-                        openFolder(coordinator.folders[idx])
-                    }
-                    return .handled
-
-                case .escape:
-                    coordinator.quickSnippetsPanel?.close()
-                    coordinator.restoreForegroundApp()
-                    return .handled
-
-                default:
-                    return .ignored
-                }
-            }
-        } else {
-            // NAVIGATION INSIDE SPECIFIC FOLDER
-            switch keyPress.key {
-            case .downArrow:
+        // 125 = Down Arrow
+        if keyCode == 125 {
+            if activeFolder != nil {
                 if !displayedFolderSnippets.isEmpty && selectedSnippetIndex < displayedFolderSnippets.count - 1 {
                     selectedSnippetIndex += 1
                     AppTheme.hapticClick()
                 }
-                return .handled
+            } else if isSearching {
+                if !searchResults.isEmpty && selectedSearchResultIndex < searchResults.count - 1 {
+                    selectedSearchResultIndex += 1
+                    AppTheme.hapticClick()
+                }
+            } else {
+                if !coordinator.folders.isEmpty && selectedFolderIndex < coordinator.folders.count - 1 {
+                    selectedFolderIndex += 1
+                    AppTheme.hapticClick()
+                }
+            }
+            return true
+        }
 
-            case .upArrow:
+        // 126 = Up Arrow
+        if keyCode == 126 {
+            if activeFolder != nil {
                 if selectedSnippetIndex > 0 {
                     selectedSnippetIndex -= 1
                     AppTheme.hapticClick()
                 }
-                return .handled
+            } else if isSearching {
+                if selectedSearchResultIndex > 0 {
+                    selectedSearchResultIndex -= 1
+                    AppTheme.hapticClick()
+                }
+            } else {
+                if selectedFolderIndex > 0 {
+                    selectedFolderIndex -= 1
+                    AppTheme.hapticClick()
+                }
+            }
+            return true
+        }
 
-            case .return:
+        // 124 = Right Arrow
+        if keyCode == 124 {
+            if activeFolder == nil && !isSearching {
+                if !coordinator.folders.isEmpty {
+                    let idx = max(0, min(selectedFolderIndex, coordinator.folders.count - 1))
+                    openFolder(coordinator.folders[idx])
+                    return true
+                }
+            } else if activeFolder == nil && isSearching {
+                if !searchResults.isEmpty {
+                    let idx = max(0, min(selectedSearchResultIndex, searchResults.count - 1))
+                    if case .folder(let folder, _) = searchResults[idx] {
+                        openFolder(folder)
+                        return true
+                    }
+                }
+            }
+            return false // Let text cursor move inside search field
+        }
+
+        // 123 = Left Arrow
+        if keyCode == 123 {
+            if activeFolder != nil {
+                backToRoot()
+                return true
+            }
+            return false // Let text cursor move inside search field
+        }
+
+        // 53 = Escape
+        if keyCode == 53 {
+            if activeFolder != nil {
+                backToRoot()
+                return true
+            }
+            if !searchText.isEmpty {
+                searchText = ""
+                selectedSearchResultIndex = 0
+                return true
+            }
+            coordinator.quickSnippetsPanel?.close()
+            coordinator.restoreForegroundApp()
+            return true
+        }
+
+        // 36 = Return / Enter
+        if keyCode == 36 {
+            if activeFolder != nil {
                 if !displayedFolderSnippets.isEmpty {
                     let idx = max(0, min(selectedSnippetIndex, displayedFolderSnippets.count - 1))
                     insertSnippet(displayedFolderSnippets[idx].content)
                 }
-                return .handled
-
-            case .leftArrow, .escape:
-                backToRoot()
-                return .handled
-
-            case .delete:
-                if searchText.isEmpty {
-                    backToRoot()
-                    return .handled
-                }
-                return .ignored
-
-            default:
-                return .ignored
+                return true
             }
+            if isSearching {
+                if !searchResults.isEmpty {
+                    let idx = max(0, min(selectedSearchResultIndex, searchResults.count - 1))
+                    executeSearchItem(searchResults[idx])
+                }
+                return true
+            }
+            if !coordinator.folders.isEmpty {
+                let idx = max(0, min(selectedFolderIndex, coordinator.folders.count - 1))
+                openFolder(coordinator.folders[idx])
+                return true
+            }
+            return true
         }
+
+        // 51 = Delete / Backspace
+        if keyCode == 51 {
+            if searchText.isEmpty && activeFolder != nil {
+                backToRoot()
+                return true
+            }
+            return false // Let normal backspace delete character in search field
+        }
+
+        return false
     }
 
     // MARK: - Actions

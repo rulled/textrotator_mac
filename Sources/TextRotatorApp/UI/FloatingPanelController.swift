@@ -3,6 +3,8 @@ import AppKit
 import SwiftUI
 
 public final class CustomNonActivatingPanel: NSPanel {
+    public var onKeyDown: ((NSEvent) -> Bool)?
+
     override public var canBecomeKey: Bool {
         return true
     }
@@ -13,6 +15,15 @@ public final class CustomNonActivatingPanel: NSPanel {
 
     override public func cancelOperation(_ sender: Any?) {
         self.orderOut(sender)
+    }
+
+    override public func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown {
+            if let onKeyDown = onKeyDown, onKeyDown(event) {
+                return
+            }
+        }
+        super.sendEvent(event)
     }
 }
 

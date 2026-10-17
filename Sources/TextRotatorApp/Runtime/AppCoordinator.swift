@@ -221,22 +221,98 @@ public final class AppCoordinator: ObservableObject {
     }
 
     private func seedInitialDataIfNeeded() {
-        if folders.isEmpty {
+        if folders.count <= 3 {
             do {
-                let f1 = try database.createFolder(name: "Быстрые ответы")
+                // 1. Клиентская поддержка (Russian)
+                let f1 = try database.createFolder(name: "Клиентская поддержка")
                 _ = try database.createSnippet(
                     folderId: f1.id,
-                    content: "Здравствуйте! Спасибо за обращение, мы уже изучаем вопрос."
+                    content: "Здравствуйте! Чем я могу вам помочь?"
                 )
                 _ = try database.createSnippet(
                     folderId: f1.id,
-                    content: "Готово! Проверьте, пожалуйста, результат и дайте обратную связь."
+                    content: "Спасибо за ожидание! Ваш запрос передан техническому специалисту, ответим в течение 15 минут."
+                )
+                _ = try database.createSnippet(
+                    folderId: f1.id,
+                    content: "Уточните, пожалуйста, номер вашего заказа или привязанный номер телефона."
+                )
+                _ = try database.createSnippet(
+                    folderId: f1.id,
+                    content: "Проблема устранена! Пожалуйста, проверьте работу сервиса и сообщите нам."
+                )
+                _ = try database.createSnippet(
+                    folderId: f1.id,
+                    content: "Благодарим за обращение! Если у вас появятся дополнительные вопросы — пишите, мы всегда на связи."
                 )
 
-                let f2 = try database.createFolder(name: "Шаблоны email")
+                // 2. Оплата и возврат (Finance, %, $, €)
+                let f2 = try database.createFolder(name: "Оплата и счета")
                 _ = try database.createSnippet(
                     folderId: f2.id,
-                    content: "Добрый день!\n\nВо вложении направляю обновленный отчет.\n\nС уважением,\nКоманда поддержки"
+                    content: "Мы предоставляем 100% гарантию возврата средств в течение 14 дней с момента покупки."
+                )
+                _ = try database.createSnippet(
+                    folderId: f2.id,
+                    content: "Ссылка на оплату сформирована и направлена в ваш личный кабинет."
+                )
+                _ = try database.createSnippet(
+                    folderId: f2.id,
+                    content: "Реквизиты для оплаты: ООО «Текст Ротатор», ИНН 7701234567, р/с 40702810900000012345."
+                )
+                _ = try database.createSnippet(
+                    folderId: f2.id,
+                    content: "Мы принимаем карты МИР, Visa, MasterCard, а также оплату через СБП без комиссии 0%."
+                )
+                _ = try database.createSnippet(
+                    folderId: f2.id,
+                    content: "Чек и закрывающие документы доступны для скачивания в формате PDF в профиле."
+                )
+
+                // 3. English Support & Responses
+                let f3 = try database.createFolder(name: "English Support")
+                _ = try database.createSnippet(
+                    folderId: f3.id,
+                    content: "Hello! How can I assist you today?"
+                )
+                _ = try database.createSnippet(
+                    folderId: f3.id,
+                    content: "Thank you for reaching out! We are currently investigating this issue and will update you shortly."
+                )
+                _ = try database.createSnippet(
+                    folderId: f3.id,
+                    content: "Could you please provide your order ID or account email address?"
+                )
+                _ = try database.createSnippet(
+                    folderId: f3.id,
+                    content: "We have issued a 100% refund for your purchase. It should appear in your account within 3-5 business days."
+                )
+                _ = try database.createSnippet(
+                    folderId: f3.id,
+                    content: "Everything is sorted out! Feel free to contact us if you need any further assistance."
+                )
+
+                // 4. Код и скрипты (DevOps & Code)
+                let f4 = try database.createFolder(name: "Код и скрипты")
+                _ = try database.createSnippet(
+                    folderId: f4.id,
+                    content: "git add . && git commit -m \"feat: update search engine\" && git push origin main"
+                )
+                _ = try database.createSnippet(
+                    folderId: f4.id,
+                    content: "curl -X POST https://api.textrotator.app/v1/translate -H \"Content-Type: application/json\""
+                )
+                _ = try database.createSnippet(
+                    folderId: f4.id,
+                    content: "docker compose up -d --build && docker compose logs -f"
+                )
+                _ = try database.createSnippet(
+                    folderId: f4.id,
+                    content: "npm run build && npm run test:coverage"
+                )
+                _ = try database.createSnippet(
+                    folderId: f4.id,
+                    content: "// TODO: optimize database indexes for FTS5 full-text query"
                 )
 
                 reloadDatabaseData()
