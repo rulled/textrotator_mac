@@ -36,160 +36,175 @@ final class QuickSnippetsNavigationTests: XCTestCase {
             )
         ]
     }
-    // MARK: - 1. Root Folders Navigation (Down, Up)
 
-    func testRootNavigationDownAndUp() {
+    // MARK: - 1. Snippet Selection Navigation (Down & Up Arrows)
+
+    func testSnippetNavigationDownAndUp() {
         let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        XCTAssertNil(state.activeFolder)
         XCTAssertEqual(state.selectedFolderIndex, 0)
+        XCTAssertEqual(state.selectedSnippetIndex, 0)
+        XCTAssertEqual(state.currentFolderSnippets.count, 3)
 
         // Down Arrow: moves 0 -> 1
         var result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDownArrow)
         XCTAssertEqual(result, .handled)
-        XCTAssertEqual(state.selectedFolderIndex, 1)
+        XCTAssertEqual(state.selectedSnippetIndex, 1)
 
         // Down Arrow: moves 1 -> 2
         result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDownArrow)
         XCTAssertEqual(result, .handled)
-        XCTAssertEqual(state.selectedFolderIndex, 2)
+        XCTAssertEqual(state.selectedSnippetIndex, 2)
 
         // Down Arrow at boundary: stays at 2 (cannot exceed count - 1)
         result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDownArrow)
         XCTAssertEqual(result, .handled)
-        XCTAssertEqual(state.selectedFolderIndex, 2)
+        XCTAssertEqual(state.selectedSnippetIndex, 2)
 
         // Up Arrow: moves 2 -> 1
         result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyUpArrow)
         XCTAssertEqual(result, .handled)
-        XCTAssertEqual(state.selectedFolderIndex, 1)
+        XCTAssertEqual(state.selectedSnippetIndex, 1)
 
         // Up Arrow: moves 1 -> 0
         result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyUpArrow)
         XCTAssertEqual(result, .handled)
-        XCTAssertEqual(state.selectedFolderIndex, 0)
+        XCTAssertEqual(state.selectedSnippetIndex, 0)
 
         // Up Arrow at boundary: stays at 0
         result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyUpArrow)
         XCTAssertEqual(result, .handled)
+        XCTAssertEqual(state.selectedSnippetIndex, 0)
+    }
+
+    // MARK: - 2. Folder Switching (Right & Left Arrows)
+
+    func testFolderSwitchingRightAndLeft() {
+        let state = QuickSnippetsNavigationState(folders: sampleFolders)
         XCTAssertEqual(state.selectedFolderIndex, 0)
-    }
+        XCTAssertEqual(state.currentFolder?.name, "Клиентская поддержка")
 
-    // MARK: - 2. Root Entry into Folder (Right Arrow & Return)
-
-    func testRootRightArrowEntersFolder() {
-        let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        state.selectedFolderIndex = 1 // "Оплата и счета"
-
-        // Right Arrow enters folder
-        let result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyRightArrow)
-        XCTAssertEqual(result, .handled)
-        XCTAssertNotNil(state.activeFolder)
-        XCTAssertEqual(state.activeFolder?.name, "Оплата и счета")
-        XCTAssertEqual(state.selectedSnippetIndex, 0)
-        XCTAssertEqual(state.searchText, "")
-    }
-
-    func testRootReturnEntersFolder() {
-        let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        state.selectedFolderIndex = 2 // "English Support"
-
-        // Return enters folder
-        let result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyReturn)
-        XCTAssertEqual(result, .handled)
-        XCTAssertNotNil(state.activeFolder)
-        XCTAssertEqual(state.activeFolder?.name, "English Support")
-        XCTAssertEqual(state.selectedSnippetIndex, 0)
-    }
-
-    // MARK: - 3. Inside Folder Navigation (Down, Up)
-
-    func testInsideFolderNavigationDownAndUp() {
-        let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        state.openFolder(sampleFolders[0]) // 3 snippets: 101, 102, 103
-
-        XCTAssertEqual(state.selectedSnippetIndex, 0)
-
-        // Down Arrow: 0 -> 1
+        // Move snippet index to 1 in folder 0
         _ = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDownArrow)
         XCTAssertEqual(state.selectedSnippetIndex, 1)
 
-        // Down Arrow: 1 -> 2
-        _ = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDownArrow)
-        XCTAssertEqual(state.selectedSnippetIndex, 2)
+        // Right Arrow: switches to folder 1 ("Оплата и счета") and resets snippet index to 0
+        var result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyRightArrow)
+        XCTAssertEqual(result, .handled)
+        XCTAssertEqual(state.selectedFolderIndex, 1)
+        XCTAssertEqual(state.currentFolder?.name, "Оплата и счета")
+        XCTAssertEqual(state.selectedSnippetIndex, 0)
+        XCTAssertEqual(state.currentFolderSnippets.count, 2)
 
-        // Down Arrow at boundary: stays at 2
-        _ = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDownArrow)
-        XCTAssertEqual(state.selectedSnippetIndex, 2)
+        // Right Arrow: switches to folder 2 ("English Support")
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyRightArrow)
+        XCTAssertEqual(result, .handled)
+        XCTAssertEqual(state.selectedFolderIndex, 2)
+        XCTAssertEqual(state.currentFolder?.name, "English Support")
 
-        // Up Arrow: 2 -> 1
-        _ = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyUpArrow)
-        XCTAssertEqual(state.selectedSnippetIndex, 1)
-    }
+        // Right Arrow at boundary: stays at 2 and is handled without beeping
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyRightArrow)
+        XCTAssertEqual(result, .handled)
+        XCTAssertEqual(state.selectedFolderIndex, 2)
 
-    // MARK: - 4. CRUCIAL: Inside Folder Left Arrow Returns to Root (NO BEEP)
+        // Left Arrow: switches back to folder 1
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyLeftArrow)
+        XCTAssertEqual(result, .handled)
+        XCTAssertEqual(state.selectedFolderIndex, 1)
+        XCTAssertEqual(state.currentFolder?.name, "Оплата и счета")
 
-    func testInsideFolderLeftArrowReturnsToRoot() {
-        let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        state.openFolder(sampleFolders[1]) // "Оплата и счета"
-        state.selectedSnippetIndex = 1
-
-        XCTAssertNotNil(state.activeFolder)
-
-        // Left Arrow (123) MUST return .handled and reset activeFolder to nil!
-        let result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyLeftArrow)
-        XCTAssertEqual(result, .handled, "Left arrow inside folder must be handled without beeping")
-        XCTAssertNil(state.activeFolder, "Active folder must be reset to nil")
+        // Left Arrow: switches back to folder 0
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyLeftArrow)
+        XCTAssertEqual(result, .handled)
         XCTAssertEqual(state.selectedFolderIndex, 0)
-        XCTAssertEqual(state.searchText, "")
-    }
 
-    // MARK: - 5. Inside Folder Escape Returns to Root
-
-    func testInsideFolderEscapeReturnsToRoot() {
-        let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        state.openFolder(sampleFolders[0])
-
-        let result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyEscape)
+        // Left Arrow at boundary: stays at 0 and is handled without beeping
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyLeftArrow)
         XCTAssertEqual(result, .handled)
-        XCTAssertNil(state.activeFolder)
+        XCTAssertEqual(state.selectedFolderIndex, 0)
     }
 
-    // MARK: - 6. Inside Folder Backspace / Delete Returns to Root (When Search Empty)
+    // MARK: - 3. Folder Cycling (Tab Key)
 
-    func testInsideFolderBackspaceWhenEmptyReturnsToRoot() {
+    func testTabCyclesFolders() {
         let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        state.openFolder(sampleFolders[0])
-        state.searchText = ""
+        XCTAssertEqual(state.selectedFolderIndex, 0)
 
-        // Delete (51) when search is empty returns to root
-        let result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDelete)
+        // Tab: 0 -> 1
+        var result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyTab)
         XCTAssertEqual(result, .handled)
-        XCTAssertNil(state.activeFolder)
+        XCTAssertEqual(state.selectedFolderIndex, 1)
+
+        // Tab: 1 -> 2
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyTab)
+        XCTAssertEqual(result, .handled)
+        XCTAssertEqual(state.selectedFolderIndex, 2)
+
+        // Tab at end wraps around: 2 -> 0
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyTab)
+        XCTAssertEqual(result, .handled)
+        XCTAssertEqual(state.selectedFolderIndex, 0)
     }
 
-    func testInsideFolderBackspaceWhenTypingIsIgnoredForTextField() {
+    // MARK: - 4. Snippet Insertion on Return Key
+
+    func testReturnKeyInsertsSelectedSnippet() {
         let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        state.openFolder(sampleFolders[0])
-        state.searchText = "но"
+        XCTAssertEqual(state.selectedSnippetIndex, 0)
 
-        // When search is not empty, Backspace must be ignored so TextField deletes character
-        let result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDelete)
-        XCTAssertEqual(result, .ignored)
-        XCTAssertNotNil(state.activeFolder)
-    }
+        // Return on first snippet in folder 0
+        var result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyReturn)
+        XCTAssertEqual(result, .insertSnippet("Здравствуйте! Чем могу помочь?"))
 
-    // MARK: - 7. Inside Folder Return Inserts Selected Snippet
-
-    func testInsideFolderReturnInsertsSnippet() {
-        let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        state.openFolder(sampleFolders[0])
-        state.selectedSnippetIndex = 1 // "Уточните, пожалуйста, номер заказа."
-
-        let result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyReturn)
+        // Move to snippet 1 and press Return
+        _ = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDownArrow)
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyReturn)
         XCTAssertEqual(result, .insertSnippet("Уточните, пожалуйста, номер заказа."))
+
+        // Switch to folder 1 and press Return on first snippet
+        _ = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyRightArrow)
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyReturn)
+        XCTAssertEqual(result, .insertSnippet("Гарантия возврата 100% средств."))
     }
 
-    // MARK: - 8. Unified Search Navigation & Instant Insertion
+    // MARK: - 5. Escape Behavior (Clear Search vs Close Overlay)
+
+    func testEscapeBehavior() {
+        let state = QuickSnippetsNavigationState(folders: sampleFolders)
+
+        // When search is empty: Escape closes overlay
+        var result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyEscape)
+        XCTAssertEqual(result, .closeOverlay)
+
+        // When searching: Escape clears search text and stays open
+        state.searchText = "заказ"
+        XCTAssertTrue(state.isSearching)
+
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyEscape)
+        XCTAssertEqual(result, .handled)
+        XCTAssertEqual(state.searchText, "")
+        XCTAssertFalse(state.isSearching)
+
+        // Second Escape closes overlay
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyEscape)
+        XCTAssertEqual(result, .closeOverlay)
+    }
+
+    // MARK: - 6. Backspace / Delete Behavior
+
+    func testDeleteBehavior() {
+        let state = QuickSnippetsNavigationState(folders: sampleFolders)
+
+        // When search is empty, Delete is handled to suppress system beep
+        var result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDelete)
+        XCTAssertEqual(result, .handled)
+
+        // When typing in search, Delete is ignored so TextField processes character deletion
+        state.searchText = "привет"
+        result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDelete)
+        XCTAssertEqual(result, .ignored)
+    }
+
+    // MARK: - 7. Unified Search Navigation & Insertion
 
     func testUnifiedSearchNavigationAndInsertion() {
         let state = QuickSnippetsNavigationState(folders: sampleFolders)
@@ -198,78 +213,28 @@ final class QuickSnippetsNavigationTests: XCTestCase {
         XCTAssertTrue(state.isSearching)
         XCTAssertFalse(state.searchResults.isEmpty)
 
-        // Find the snippet result in search results
-        let firstResult = state.searchResults[0]
-        if case .snippet(let s, _, _, _) = firstResult {
-            XCTAssertTrue(s.content.contains("100%"))
-        }
+        // Down arrow in search results
+        _ = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDownArrow)
 
-        // Return on snippet inserts text immediately
+        // Return on search result inserts snippet
         let returnResult = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyReturn)
         if case .insertSnippet(let content) = returnResult {
             XCTAssertTrue(content.contains("возврат"))
         } else {
-            XCTFail("Expected .insertSnippet result on snippet return")
+            XCTFail("Expected .insertSnippet result on search return")
         }
     }
 
-    func testUnifiedSearchFolderResultEntry() {
-        let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        state.searchText = "english"
-
-        XCTAssertTrue(state.isSearching)
-        XCTAssertFalse(state.searchResults.isEmpty)
-
-        // The folder "English Support" matches with high score
-        var foundFolderIndex: Int?
-        for (i, item) in state.searchResults.enumerated() {
-            if case .folder(let f, _) = item, f.name == "English Support" {
-                foundFolderIndex = i
-                break
-            }
-        }
-        XCTAssertNotNil(foundFolderIndex)
-
-        state.selectedSearchResultIndex = foundFolderIndex!
-
-        // Pressing Return on folder drills down into that folder
-        let result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyReturn)
-        XCTAssertEqual(result, .handled)
-        XCTAssertNotNil(state.activeFolder)
-        XCTAssertEqual(state.activeFolder?.name, "English Support")
-    }
-
-    func testUnifiedSearchEscapeClearsSearch() {
-        let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        state.searchText = "запрос"
-
-        let result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyEscape)
-        XCTAssertEqual(result, .handled)
-        XCTAssertEqual(state.searchText, "")
-        XCTAssertFalse(state.isSearching)
-        XCTAssertNil(state.activeFolder)
-    }
-
-    // MARK: - 9. Root Escape Closes Overlay
-
-    func testRootEscapeClosesOverlay() {
-        let state = QuickSnippetsNavigationState(folders: sampleFolders)
-        XCTAssertNil(state.activeFolder)
-        XCTAssertEqual(state.searchText, "")
-
-        let result = state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyEscape)
-        XCTAssertEqual(result, .closeOverlay)
-    }
-
-    // MARK: - 10. Empty Folders Safety
+    // MARK: - 8. Empty Folders Safety
 
     func testEmptyFoldersSafety() {
         let state = QuickSnippetsNavigationState(folders: [])
 
         XCTAssertEqual(state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyDownArrow), .handled)
         XCTAssertEqual(state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyUpArrow), .handled)
-        XCTAssertEqual(state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyRightArrow), .ignored)
-        XCTAssertEqual(state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyLeftArrow), .ignored)
+        XCTAssertEqual(state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyRightArrow), .handled)
+        XCTAssertEqual(state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyLeftArrow), .handled)
         XCTAssertEqual(state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyReturn), .handled)
+        XCTAssertEqual(state.handleKeyDown(keyCode: QuickSnippetsNavigationState.keyEscape), .closeOverlay)
     }
 }

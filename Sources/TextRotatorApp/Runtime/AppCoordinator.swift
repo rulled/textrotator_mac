@@ -124,14 +124,35 @@ public final class AppCoordinator: ObservableObject {
         }
 
         rememberForegroundApp()
+        let navState = QuickSnippetsNavigationState(folders: self.folders)
         let panel = FloatingPanelController(title: "Snippets")
-        let view = QuickSnippetsView(coordinator: self)
-        panel.setContent(view: view, size: NSSize(width: 380, height: 320))
-        panel.positionNearCursor(size: NSSize(width: 380, height: 320))
-        panel.show()
-        self.quickSnippetsPanel = panel
-    }
+        let view = QuickSnippetsView(coordinator: self, navState: navState)
+        let size = NSSize(width: 440, height: 350)
+        panel.setContent(view: view, size: size)
+        panel.positionNearCursor(size: size)
 
+        panel.panel.onKeyDown = { [weak self, weak navState] event in
+            guard let self = self, let navState = navState else { return false }
+            let result = navState.handleKeyDown(keyCode: event.keyCode)
+            switch result {
+            case .handled:
+                AppTheme.hapticClick()
+                return true
+            case .ignored:
+                return false
+            case .insertSnippet(let text):
+                self.insertSnippetText(text)
+                return true
+            case .closeOverlay:
+                self.quickSnippetsPanel?.close()
+                self.restoreForegroundApp()
+                return true
+            }
+        }
+
+        self.quickSnippetsPanel = panel
+        panel.show()
+    }
     public func insertSnippetText(_ text: String) {
         quickSnippetsPanel?.close()
         restoreForegroundApp()

@@ -10,7 +10,7 @@ public final class CustomNonActivatingPanel: NSPanel {
     }
 
     override public var canBecomeMain: Bool {
-        return false
+        return true
     }
 
     override public func cancelOperation(_ sender: Any?) {
@@ -92,8 +92,7 @@ public final class FloatingPanelController: NSObject, NSWindowDelegate {
     public func show() {
         panel.alphaValue = 0.0
         panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: false)
-
+        NSApp.activate(ignoringOtherApps: true)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.14
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
