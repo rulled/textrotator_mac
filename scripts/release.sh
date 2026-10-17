@@ -352,21 +352,16 @@ if [ "$LOCAL_BUILD" -eq 1 ]; then
         echo '```' >> "${NOTES_FILE}"
 
         log_step "8. Publishing GitHub Release (gh CLI)"
-        GH_FLAGS=()
-        [ "$DRAFT" -eq 1 ] && GH_FLAGS+=("--draft")
-        [ "$PRERELEASE" -eq 1 ] && GH_FLAGS+=("--prerelease")
+        GH_CMD=("gh" "release" "create" "${TAG}")
+        [ -f "build/TextRotator-${VERSION}.dmg" ] && GH_CMD+=("build/TextRotator-${VERSION}.dmg")
+        [ -f "build/TextRotator-${VERSION}.zip" ] && GH_CMD+=("build/TextRotator-${VERSION}.zip")
+        [ -f "build/TextRotator.app.zip" ] && GH_CMD+=("build/TextRotator.app.zip")
+        [ -f "build/checksums.txt" ] && GH_CMD+=("build/checksums.txt")
+        GH_CMD+=("--title" "TextRotator ${TAG}" "--notes-file" "${NOTES_FILE}")
+        [ "$DRAFT" -eq 1 ] && GH_CMD+=("--draft")
+        [ "$PRERELEASE" -eq 1 ] && GH_CMD+=("--prerelease")
 
-        ASSETS=()
-        [ -f "build/TextRotator-${VERSION}.dmg" ] && ASSETS+=("build/TextRotator-${VERSION}.dmg")
-        [ -f "build/TextRotator-${VERSION}.zip" ] && ASSETS+=("build/TextRotator-${VERSION}.zip")
-        [ -f "build/TextRotator.app.zip" ] && ASSETS+=("build/TextRotator.app.zip")
-        [ -f "build/checksums.txt" ] && ASSETS+=("build/checksums.txt")
-
-        gh release create "${TAG}" "${ASSETS[@]}" \
-            --title "TextRotator ${TAG}" \
-            --notes-file "${NOTES_FILE}" \
-            "${GH_FLAGS[@]}"
-
+        "${GH_CMD[@]}"
         log_success "GitHub Release ${TAG} published successfully!"
     else
         log_info "[DRY-RUN] Would compile and package DMG/Zip"
