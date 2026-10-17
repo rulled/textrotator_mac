@@ -6,7 +6,6 @@ public struct SnippetsManagerView: View {
     @ObservedObject var coordinator: AppCoordinator
 
     @State private var selectedFolderId: Int64?
-    @State private var searchText: String = ""
 
     // Folder Actions State
     @State private var isAddingFolder: Bool = false
@@ -37,14 +36,6 @@ public struct SnippetsManagerView: View {
         return coordinator.folders.first
     }
 
-    private var filteredSnippets: [SnippetItem] {
-        guard let folder = selectedFolder else { return [] }
-        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return folder.snippets
-        }
-        let query = searchText.lowercased()
-        return folder.snippets.filter { $0.content.lowercased().contains(query) }
-    }
 
     public var body: some View {
         NavigationSplitView {
@@ -112,13 +103,27 @@ public struct SnippetsManagerView: View {
     private var detailContent: some View {
         if let folder = selectedFolder {
             VStack(spacing: 0) {
-                detailHeaderToolbar
-                Divider()
                 snippetsListContainer(folder: folder)
                 Divider()
                 statusFooter
             }
-            .searchable(text: $searchText, placement: .toolbar, prompt: "Поиск по тексту...")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        withAnimation(AppTheme.springFast) {
+                            isAddingSnippet = true
+                            newSnippetContent = ""
+                            editingSnippetId = nil
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .help("Добавить сниппет (Cmd+N)")
+                    .keyboardShortcut("n", modifiers: .command)
+                    .accessibilityLabel("Добавить новый сниппет")
+                }
+            }
         } else {
             ContentUnavailableView(
                 "Папка не выбрана",
@@ -129,61 +134,32 @@ public struct SnippetsManagerView: View {
         }
     }
 
-    // MARK: - Detail Header Toolbar (No duplicate folder title)
-
-    private var detailHeaderToolbar: some View {
-        HStack {
-            Spacer()
-
-            Button {
-                withAnimation(AppTheme.springFast) {
-                    isAddingSnippet = true
-                    newSnippetContent = ""
-                    editingSnippetId = nil
-                }
-            } label: {
-                Label("Добавить сниппет", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-            .help("Создать новый сниппет (Cmd+N)")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color(NSColor.windowBackgroundColor))
-    }
-
     // MARK: - Snippets List Container
 
     @ViewBuilder
     private func snippetsListContainer(folder: FolderWithSnippets) -> some View {
-        if filteredSnippets.isEmpty && !isAddingSnippet {
-            if !searchText.isEmpty {
-                ContentUnavailableView.search(text: searchText)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ContentUnavailableView {
-                    Label("В этой папке пока нет сниппетов", systemImage: "doc.text")
-                } description: {
-                    Text("Создайте первый сниппет для быстрого доступа по хоткею.")
-                } actions: {
-                    Button("Создать сниппет") {
-                        withAnimation(AppTheme.springFast) {
-                            isAddingSnippet = true
-                            newSnippetContent = ""
-                        }
+        if folder.snippets.isEmpty && !isAddingSnippet {
+            ContentUnavailableView {
+                Label("В этой папке пока нет сниппетов", systemImage: "doc.text")
+            } description: {
+                Text("Создайте первый сниппет для быстрого доступа по хоткею.")
+            } actions: {
+                Button("Создать сниппет") {
+                    withAnimation(AppTheme.springFast) {
+                        isAddingSnippet = true
+                        newSnippetContent = ""
                     }
-                    .buttonStyle(.bordered)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .buttonStyle(.bordered)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List {
                 if isAddingSnippet {
                     inlineNewSnippetCard(folderId: folder.id)
                 }
 
-                ForEach(filteredSnippets) { snippet in
+                ForEach(folder.snippets) { snippet in
                     if editingSnippetId == snippet.id {
                         inlineSnippetEditor(snippet: snippet)
                     } else {
@@ -443,7 +419,7 @@ public struct SnippetsManagerView: View {
     }
 
     private func moveSnippets(from source: IndexSet, to destination: Int) {
-        guard let folder = selectedFolder, searchText.isEmpty else { return }
+        guard let folder = selectedFolder else { return }
         var reordered = folder.snippets
         reordered.move(fromOffsets: source, toOffset: destination)
         let order = reordered.map(\.id)
