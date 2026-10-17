@@ -19,8 +19,8 @@ private final class ActionCollector: @unchecked Sendable {
     }
 }
 
-@main
 struct TextRotatorApp {
+    @MainActor
     static func main() async {
         let args = CommandLine.arguments
 
@@ -218,3 +218,5 @@ struct TextRotatorApp {
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     }
 }
+
+await TextRotatorApp.main()

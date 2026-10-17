@@ -55,28 +55,40 @@ public enum AppTheme {
 public extension View {
     @ViewBuilder
     func activeGlassAppearance() -> some View {
+        #if compiler(>=6.0)
         if #available(macOS 15.0, *) {
             self.materialActiveAppearance(.active)
         } else {
             self
         }
+        #else
+        self
+        #endif
     }
 
     @ViewBuilder
     func glassButton() -> some View {
+        #if compiler(>=6.0)
         if #available(macOS 26.0, *) {
             self.buttonStyle(.glass)
         } else {
             self.buttonStyle(.plain)
         }
+        #else
+        self.buttonStyle(.plain)
+        #endif
     }
 
     @ViewBuilder
     func glassProminentButton() -> some View {
+        #if compiler(>=6.0)
         if #available(macOS 26.0, *) {
             self.buttonStyle(.glassProminent)
         } else {
             self.buttonStyle(.borderedProminent)
         }
+        #else
+        self.buttonStyle(.borderedProminent)
+        #endif
     }
 }

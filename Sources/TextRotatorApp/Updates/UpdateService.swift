@@ -172,18 +172,21 @@ public final class UpdateService: NSObject, ObservableObject {
         let sessionConfig = URLSessionConfiguration.default
         let delegate = DownloadProgressDelegate(
             onProgress: { [weak self] progress, bytesWritten, total in
+                guard let self else { return }
                 Task { @MainActor in
-                    self?.state = .downloading(progress: progress, bytesWritten: bytesWritten, totalBytes: total)
+                    self.state = .downloading(progress: progress, bytesWritten: bytesWritten, totalBytes: total)
                 }
             },
             onComplete: { [weak self] tempLocation in
+                guard let self else { return }
                 Task { @MainActor in
-                    await self?.processDownloadedZip(tempLocation: tempLocation)
+                    await self.processDownloadedZip(tempLocation: tempLocation)
                 }
             },
             onError: { [weak self] error in
+                guard let self else { return }
                 Task { @MainActor in
-                    self?.state = .failed(error.localizedDescription)
+                    self.state = .failed(error.localizedDescription)
                 }
             }
         )
