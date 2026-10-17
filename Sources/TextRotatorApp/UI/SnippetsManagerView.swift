@@ -8,12 +8,13 @@ public struct SnippetsManagerView: View {
     @State private var selectedFolderId: Int64?
 
     // Folder Actions State
-    @State private var isAddingFolder: Bool = false
+    @State private var isCreatingFolder: Bool = false
     @State private var newFolderName: String = ""
     @State private var editingFolderId: Int64?
     @State private var editingFolderName: String = ""
     @State private var folderPendingDeletion: FolderWithSnippets?
     @FocusState private var isFolderRenameFocused: Bool
+    @FocusState private var isFolderCreateFocused: Bool
 
     // Snippet Inline Actions State
     @State private var isAddingSnippet: Bool = false
@@ -64,9 +65,6 @@ public struct SnippetsManagerView: View {
         } message: {
             Text("Все сниппеты в этой папке будут безвозвратно удалены.")
         }
-        .sheet(isPresented: $isAddingFolder) {
-            addFolderSheet
-        }
     }
 
     // MARK: - Sidebar Content
@@ -75,6 +73,10 @@ public struct SnippetsManagerView: View {
     private var sidebarContent: some View {
         List(selection: $selectedFolderId) {
             Section("Папки") {
+                if isCreatingFolder {
+                    inlineNewFolderRow
+                }
+
                 ForEach(coordinator.folders) { folder in
                     folderSidebarRow(folder: folder)
                 }
@@ -86,12 +88,15 @@ public struct SnippetsManagerView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    newFolderName = ""
-                    isAddingFolder = true
+                    withAnimation(AppTheme.springFast) {
+                        newFolderName = ""
+                        isCreatingFolder = true
+                        editingFolderId = nil
+                    }
                 } label: {
                     Image(systemName: "folder.badge.plus")
                 }
-                .help("Создать папку")
+                .help("Создать папку (вверху списка)")
                 .accessibilityLabel("Создать новую папку")
             }
         }
@@ -209,32 +214,46 @@ public struct SnippetsManagerView: View {
         .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
     }
 
-    // MARK: - Add Folder Sheet
+    // MARK: - Inline New Folder Row (Top of sidebar)
 
-    private var addFolderSheet: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Новая папка")
-                .font(.headline)
+    private var inlineNewFolderRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "folder.badge.plus")
+                .foregroundColor(.accentColor)
+                .font(.system(size: 13))
 
             TextField("Название папки...", text: $newFolderName)
-                .textFieldStyle(.roundedBorder)
-
-            HStack {
-                Spacer()
-                Button("Отмена") {
-                    isAddingFolder = false
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: .semibold))
+                .focused($isFolderCreateFocused)
+                .onSubmit {
+                    submitCreateFolder()
                 }
-                .keyboardShortcut(.cancelAction)
 
-                Button("Создать") {
-                    createFolder()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button {
+                submitCreateFolder()
+            } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.accentColor)
+                    .font(.system(size: 12))
             }
+            .buttonStyle(.plain)
+            .help("Сохранить (Enter)")
+
+            Button {
+                cancelCreateFolder()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .help("Отмена (Escape)")
         }
-        .padding(20)
-        .frame(width: 320)
+        .padding(.vertical, 2)
+        .onAppear {
+            isFolderCreateFocused = true
+        }
     }
 
     // MARK: - Folder Sidebar Row (with inline rename)
@@ -457,18 +476,36 @@ public struct SnippetsManagerView: View {
         }
     }
 
-    private func createFolder() {
+    private func submitCreateFolder() {
         let name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
+        guard !name.isEmpty else {
+            cancelCreateFolder()
+            return
+        }
         do {
             let created = try coordinator.database.createFolder(name: name)
+            // Position the newly created folder at the very top of the list
+            var order = [created.id]
+            order.append(contentsOf: coordinator.folders.map(\.id).filter { $0 != created.id })
+            try? coordinator.database.reorderFolders(order: order)
+
             coordinator.reloadDatabaseData()
             selectedFolderId = created.id
             AppTheme.hapticClick()
         } catch {
             print("Failed to create folder: \(error)")
         }
-        isAddingFolder = false
+        withAnimation(AppTheme.springFast) {
+            isCreatingFolder = false
+            newFolderName = ""
+        }
+    }
+
+    private func cancelCreateFolder() {
+        withAnimation(AppTheme.springFast) {
+            isCreatingFolder = false
+            newFolderName = ""
+        }
     }
 
     private func deleteFolder(_ folder: FolderWithSnippets) {
