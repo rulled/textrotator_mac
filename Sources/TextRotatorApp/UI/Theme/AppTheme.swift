@@ -2,11 +2,11 @@ import SwiftUI
 import AppKit
 
 public enum AppTheme {
-    // MARK: - Corner Radii
-    public static let panelRadius: CGFloat = 14.0
-    public static let cardRadius: CGFloat = 10.0
-    public static let pillRadius: CGFloat = 6.0
-    public static let badgeRadius: CGFloat = 4.0
+    // MARK: - Modern macOS Sequoia / Tahoe Corner Radii
+    public static let panelRadius: CGFloat = 20.0
+    public static let cardRadius: CGFloat = 12.0
+    public static let pillRadius: CGFloat = 8.0
+    public static let badgeRadius: CGFloat = 5.0
 
     // MARK: - Spring Animations (Apple Design Foundations)
     /// Snappy, critically damped spring for instant user interaction and selection
@@ -18,16 +18,28 @@ public enum AppTheme {
     /// Bouncy spring for micro-interactions with momentum (swap, copy feedback)
     public static let springBouncy = Animation.spring(response: 0.32, dampingFraction: 0.72)
 
-    // MARK: - Light-Catching Hairline Borders
-    public static func hairlineBorder(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.18)
-            : Color.black.opacity(0.08)
+    // MARK: - Liquid Glass Specular Rim Border (Specular Reflection)
+    /// Physical rim reflection: top edge catches ambient light (specular highlight),
+    /// sides have crisp subpixel definition, bottom edge darkens into window shadow.
+    public static func glassSpecularBorder(radius: CGFloat = panelRadius, for colorScheme: ColorScheme) -> some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .strokeBorder(
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.white.opacity(colorScheme == .dark ? 0.30 : 0.55), location: 0.0),
+                        .init(color: Color.white.opacity(colorScheme == .dark ? 0.12 : 0.20), location: 0.12),
+                        .init(color: Color.white.opacity(colorScheme == .dark ? 0.04 : 0.08), location: 0.85),
+                        .init(color: Color.black.opacity(colorScheme == .dark ? 0.30 : 0.12), location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 0.5
+            )
     }
 
     public static func panelBackgroundStroke(for colorScheme: ColorScheme) -> some View {
-        RoundedRectangle(cornerRadius: panelRadius, style: .continuous)
-            .stroke(hairlineBorder(for: colorScheme), lineWidth: 0.5)
+        glassSpecularBorder(radius: panelRadius, for: colorScheme)
     }
 
     // MARK: - Haptic Feedback (Multimodal Harmony)
@@ -37,5 +49,34 @@ public enum AppTheme {
 
     public static func hapticSuccess() {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+    }
+}
+
+public extension View {
+    @ViewBuilder
+    func activeGlassAppearance() -> some View {
+        if #available(macOS 15.0, *) {
+            self.materialActiveAppearance(.active)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func glassButton() -> some View {
+        if #available(macOS 26.0, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self.buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    func glassProminentButton() -> some View {
+        if #available(macOS 26.0, *) {
+            self.buttonStyle(.glassProminent)
+        } else {
+            self.buttonStyle(.borderedProminent)
+        }
     }
 }

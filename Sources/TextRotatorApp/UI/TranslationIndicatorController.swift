@@ -87,6 +87,7 @@ private struct IndicatorContentView: View {
         ZStack {
             Circle()
                 .fill(.ultraThinMaterial)
+                .activeGlassAppearance()
                 .frame(width: 32, height: 32)
                 .overlay(
                     Circle()

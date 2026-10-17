@@ -31,10 +31,9 @@ public struct TranslatorCardView: View {
                 } label: {
                     Image(systemName: "arrow.left.arrow.right")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.secondary)
                         .rotationEffect(.degrees(swapRotation))
                 }
-                .buttonStyle(.plain)
+                .glassButton()
                 .help("Поменять языки местами")
                 .accessibilityLabel("Сменить направление перевода")
 
@@ -134,12 +133,8 @@ public struct TranslatorCardView: View {
                         Text(copiedFeedback ? "Скопировано" : "Копировать")
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Color.secondary.opacity(0.12))
-                    .cornerRadius(AppTheme.pillRadius)
                 }
-                .buttonStyle(SpringFeedbackButtonStyle())
+                .glassButton()
                 .disabled(coordinator.translatorResultText.isEmpty)
                 .help("Скопировать перевод (Cmd+C)")
                 .accessibilityLabel("Скопировать перевод")
@@ -150,17 +145,10 @@ public struct TranslatorCardView: View {
                 Button {
                     insertTranslation()
                 } label: {
-                    HStack(spacing: 5) {
-                        Text("↵ Вставить в приложение")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 6)
-                    .background(Color.accentColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(AppTheme.pillRadius)
+                    Text("↵ Вставить в приложение")
+                        .font(.system(size: 11, weight: .semibold))
                 }
-                .buttonStyle(SpringFeedbackButtonStyle())
+                .glassProminentButton()
                 .disabled(coordinator.translatorResultText.isEmpty)
                 .help("Заменить выделенный текст переводом (Enter)")
                 .accessibilityLabel("Вставить перевод в активное приложение")
@@ -170,9 +158,10 @@ public struct TranslatorCardView: View {
             .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
         }
         .frame(width: 380, height: 210)
-        .background(.regularMaterial)
+        .background(.ultraThinMaterial)
+        .activeGlassAppearance()
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.panelRadius, style: .continuous))
-        .overlay(AppTheme.panelBackgroundStroke(for: colorScheme))
+        .overlay(AppTheme.glassSpecularBorder(for: colorScheme))
         .onKeyPress { keyPress in
             if keyPress.key == .return {
                 insertTranslation()

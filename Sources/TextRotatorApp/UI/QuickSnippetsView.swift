@@ -44,9 +44,10 @@ public struct QuickSnippetsView: View {
             footerHintsBar
         }
         .frame(width: 400, height: 320)
-        .background(.regularMaterial)
+        .background(.ultraThinMaterial)
+        .activeGlassAppearance()
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.panelRadius, style: .continuous))
-        .overlay(AppTheme.panelBackgroundStroke(for: colorScheme))
+        .overlay(AppTheme.glassSpecularBorder(for: colorScheme))
         .onAppear {
             navState.folders = coordinator.folders
             isSearchFocused = true
@@ -72,13 +73,8 @@ public struct QuickSnippetsView: View {
                         Text("Папки")
                             .font(.system(size: 12, weight: .medium))
                     }
-                    .foregroundColor(.accentColor)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3.5)
-                    .background(Color.accentColor.opacity(0.12))
-                    .cornerRadius(AppTheme.pillRadius)
                 }
-                .buttonStyle(.plain)
+                .glassButton()
                 .accessibilityLabel("Назад к списку папок")
 
                 Text(folder.name)
