@@ -85,7 +85,12 @@ public final class AppCoordinator: ObservableObject {
 
     public func restoreForegroundApp() {
         if let target = lastExternalApp {
-            target.activate(options: [])
+            if #available(macOS 14.0, *) {
+                NSApp.yieldActivation(to: target)
+                target.activate()
+            } else {
+                target.activate(options: [.activateIgnoringOtherApps])
+            }
         }
     }
 
@@ -104,8 +109,9 @@ public final class AppCoordinator: ObservableObject {
         do {
             let result = try await translationRouter.translateWithFallback(request: request)
             restoreForegroundApp()
-            // Slight delay to ensure target app has focus
-            try? await Task.sleep(nanoseconds: 60_000_000)
+            NSApp.deactivate()
+            // Delay to ensure target app has focus
+            try? await Task.sleep(nanoseconds: 80_000_000)
             try await textIO.insertText(result.translatedText)
         } catch {
             print("Instant translate error: \(error)")
@@ -157,11 +163,19 @@ public final class AppCoordinator: ObservableObject {
         panel.show()
     }
     public func insertSnippetText(_ text: String) {
-        quickSnippetsPanel?.close()
+        quickSnippetsPanel?.dismissImmediately()
+        quickSnippetsPanel = nil
+
+        restoreForegroundApp()
+        NSApp.deactivate()
 
         Task {
-            try? await Task.sleep(nanoseconds: 60_000_000)
-            try? await textIO.insertText(text)
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            do {
+                try await textIO.insertText(text)
+            } catch {
+                print("Failed to insert snippet: \(error)")
+            }
         }
     }
 
@@ -234,11 +248,15 @@ public final class AppCoordinator: ObservableObject {
 
     public func insertCurrentTranslation() {
         let text = translatorResultText
-        translatorPanel?.close()
+        translatorPanel?.dismissImmediately()
+        translatorPanel = nil
 
         guard !text.isEmpty else { return }
+        restoreForegroundApp()
+        NSApp.deactivate()
+
         Task {
-            try? await Task.sleep(nanoseconds: 60_000_000)
+            try? await Task.sleep(nanoseconds: 80_000_000)
             try? await textIO.insertText(text)
         }
     }

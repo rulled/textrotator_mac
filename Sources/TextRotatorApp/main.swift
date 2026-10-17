@@ -36,6 +36,7 @@ struct TextRotatorApp {
 
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory) // Menu Bar agent (LSUIElement behavior, no Dock icon)
+        ProcessInfo.processInfo.disableAutomaticTermination("TextRotator Menu Bar Daemon")
 
         let coordinator = AppCoordinator.shared
         let statusBar = StatusBarController(coordinator: coordinator)

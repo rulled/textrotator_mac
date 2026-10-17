@@ -9,13 +9,22 @@ public enum QuickSnippetsKeyResult: Equatable, Sendable {
     case closeOverlay
 }
 
-/// Decoupled, fully unit-testable navigation state machine for QuickSnippets overlay.
+/// Decoupled, fully unit-testable navigation state machine for QuickSnippets overlay (Lite Mode).
 ///
-/// Layout: horizontal folder tabs + vertical snippet list + unified search.
-/// - `↓` / `↑`: Move selection through snippets (or search results).
-/// - `→` / `←` / `Tab`: Switch folder tabs.
-/// - `Enter`: Insert selected snippet.
-/// - `Escape`: Clear search, or dismiss overlay.
+/// Hierarchical 2-level UX:
+/// - Level 1 (activeFolder == nil): List of FOLDERS.
+///   - `↓` / `↑`: Select folder.
+///   - `→` / `↵`: Open selected folder.
+///   - `esc`: Close overlay.
+/// - Level 2 (activeFolder != nil): List of SNIPPETS in opened folder.
+///   - `↓` / `↑`: Select snippet.
+///   - `↵`: Insert selected snippet.
+///   - `←`: Back to folders list.
+///   - `esc`: Close overlay.
+/// - Search mode (searchText != ""): Unified fuzzy search across all folders and snippets.
+///   - `↓` / `↑`: Navigate search results.
+///   - `↵`: Insert snippet or open folder.
+///   - `esc`: Clear search.
 @MainActor
 public final class QuickSnippetsNavigationState: ObservableObject {
 
@@ -29,6 +38,7 @@ public final class QuickSnippetsNavigationState: ObservableObject {
         didSet { rebuildState() }
     }
 
+    @Published public private(set) var activeFolder: FolderWithSnippets?
     @Published public private(set) var selectedFolderIndex: Int = 0
     @Published public private(set) var selectedSnippetIndex: Int = 0
     @Published public private(set) var selectedSearchResultIndex: Int = 0
@@ -40,9 +50,18 @@ public final class QuickSnippetsNavigationState: ObservableObject {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    public var currentFolder: FolderWithSnippets? {
-        guard !folders.isEmpty else { return nil }
+    public var selectedFolder: FolderWithSnippets? {
+        guard !folders.isEmpty, folders.indices.contains(selectedFolderIndex) else { return nil }
         return folders[selectedFolderIndex]
+    }
+
+    public var currentFolder: FolderWithSnippets? {
+        if let activeFolder { return activeFolder }
+        return selectedFolder
+    }
+
+    public var currentSnippets: [SnippetItem] {
+        activeFolder?.snippets ?? []
     }
 
     public var currentFolderSnippets: [SnippetItem] {
@@ -51,9 +70,9 @@ public final class QuickSnippetsNavigationState: ObservableObject {
 
     // MARK: - Init
 
-    public init(folders: [FolderWithSnippets] = []) {
+    public init(folders: [FolderWithSnippets] = [], activeFolder: FolderWithSnippets? = nil) {
         self.folders = folders
-        // didSet doesn't fire during init, so call manually
+        self.activeFolder = activeFolder
         rebuildState()
     }
 
@@ -62,23 +81,35 @@ public final class QuickSnippetsNavigationState: ObservableObject {
     private func rebuildState() {
         // Clamp folder index
         if folders.isEmpty {
-            if selectedFolderIndex != 0 { selectedFolderIndex = 0 }
-            if selectedSnippetIndex != 0 { selectedSnippetIndex = 0 }
+            selectedFolderIndex = 0
+            selectedSnippetIndex = 0
+            activeFolder = nil
         } else {
             let maxFolder = folders.count - 1
             if selectedFolderIndex > maxFolder {
                 selectedFolderIndex = maxFolder
             }
-            // Clamp snippet index to current folder
-            let snippetCount = currentFolderSnippets.count
-            if snippetCount == 0 {
-                if selectedSnippetIndex != 0 { selectedSnippetIndex = 0 }
-            } else if selectedSnippetIndex >= snippetCount {
-                selectedSnippetIndex = snippetCount - 1
+
+            // Sync activeFolder with updated folders list
+            if let current = activeFolder {
+                if let updated = folders.first(where: { $0.id == current.id }) {
+                    activeFolder = updated
+                    let count = updated.snippets.count
+                    if count == 0 {
+                        selectedSnippetIndex = 0
+                    } else if selectedSnippetIndex >= count {
+                        selectedSnippetIndex = count - 1
+                    }
+                } else {
+                    activeFolder = nil
+                    selectedSnippetIndex = 0
+                }
+            } else {
+                selectedSnippetIndex = 0
             }
         }
 
-        // Recompute search results (once, cached as stored property)
+        // Recompute search results
         let newResults = isSearching
             ? SmartSearchEngine.search(query: searchText, in: folders)
             : []
@@ -86,7 +117,7 @@ public final class QuickSnippetsNavigationState: ObservableObject {
 
         // Clamp search result index
         if searchResults.isEmpty {
-            if selectedSearchResultIndex != 0 { selectedSearchResultIndex = 0 }
+            selectedSearchResultIndex = 0
         } else if selectedSearchResultIndex >= searchResults.count {
             selectedSearchResultIndex = searchResults.count - 1
         }
@@ -96,19 +127,38 @@ public final class QuickSnippetsNavigationState: ObservableObject {
 
     public func selectFolder(index: Int) {
         guard !folders.isEmpty else { return }
-        let clamped = max(0, min(index, folders.count - 1))
-        selectedFolderIndex = clamped
-        selectedSnippetIndex = 0
-        if isSearching { searchText = "" }
+        selectedFolderIndex = max(0, min(index, folders.count - 1))
+    }
+
+    public func selectSnippet(index: Int) {
+        let maxIdx = max(0, currentSnippets.count - 1)
+        selectedSnippetIndex = max(0, min(index, maxIdx))
     }
 
     public func openFolder(_ folder: FolderWithSnippets) {
         if let idx = folders.firstIndex(where: { $0.id == folder.id }) {
-            selectFolder(index: idx)
+            selectedFolderIndex = idx
+            activeFolder = folders[idx]
+        } else {
+            activeFolder = folder
         }
+        selectedSnippetIndex = 0
+        if isSearching { searchText = "" }
+    }
+
+    public func openSelectedFolder() {
+        guard let folder = selectedFolder else { return }
+        openFolder(folder)
+    }
+
+    public func backToFolders() {
+        activeFolder = nil
+        selectedSnippetIndex = 0
+        if isSearching { searchText = "" }
     }
 
     public func backToRoot() {
+        activeFolder = nil
         selectedFolderIndex = 0
         selectedSnippetIndex = 0
         selectedSearchResultIndex = 0
@@ -131,54 +181,88 @@ public final class QuickSnippetsNavigationState: ObservableObject {
     public func handleKeyDown(keyCode: UInt16) -> QuickSnippetsKeyResult {
         switch keyCode {
 
-        // ↓ Down Arrow — navigate snippets / search results downward
+        // ↓ Down Arrow
         case Self.keyDownArrow:
             if isSearching {
                 if selectedSearchResultIndex < searchResults.count - 1 {
                     selectedSearchResultIndex += 1
                 }
-            } else if selectedSnippetIndex < currentFolderSnippets.count - 1 {
-                selectedSnippetIndex += 1
+            } else if activeFolder == nil {
+                // Navigate folders down
+                if selectedFolderIndex < folders.count - 1 {
+                    selectedFolderIndex += 1
+                }
+            } else {
+                // Navigate snippets down
+                if selectedSnippetIndex < currentSnippets.count - 1 {
+                    selectedSnippetIndex += 1
+                }
             }
             return .handled
 
-        // ↑ Up Arrow — navigate snippets / search results upward
+        // ↑ Up Arrow
         case Self.keyUpArrow:
             if isSearching {
                 if selectedSearchResultIndex > 0 {
                     selectedSearchResultIndex -= 1
                 }
-            } else if selectedSnippetIndex > 0 {
-                selectedSnippetIndex -= 1
+            } else if activeFolder == nil {
+                // Navigate folders up
+                if selectedFolderIndex > 0 {
+                    selectedFolderIndex -= 1
+                }
+            } else {
+                // Navigate snippets up
+                if selectedSnippetIndex > 0 {
+                    selectedSnippetIndex -= 1
+                }
             }
             return .handled
 
-        // → Right Arrow — switch folder tab right (passthrough during search for text cursor)
+        // → Right Arrow — Open folder if at root level
         case Self.keyRightArrow:
-            guard !isSearching else { return .ignored }
-            if selectedFolderIndex < folders.count - 1 {
-                selectedFolderIndex += 1
-                selectedSnippetIndex = 0
+            if isSearching {
+                guard !searchResults.isEmpty else { return .ignored }
+                let idx = min(selectedSearchResultIndex, searchResults.count - 1)
+                if case .folder(let folder, _) = searchResults[idx] {
+                    openFolder(folder)
+                    return .handled
+                }
+                return .ignored
+            } else if activeFolder == nil {
+                openSelectedFolder()
+                return .handled
+            } else {
+                // Inside folder: right arrow has no deeper level
+                return .handled
             }
-            return .handled
 
-        // ← Left Arrow — switch folder tab left (passthrough during search for text cursor)
+        // ← Left Arrow — Go back to folders if inside folder
         case Self.keyLeftArrow:
-            guard !isSearching else { return .ignored }
-            if selectedFolderIndex > 0 {
-                selectedFolderIndex -= 1
-                selectedSnippetIndex = 0
+            if isSearching {
+                return .ignored
+            } else if activeFolder != nil {
+                backToFolders()
+                return .handled
+            } else {
+                // Already at root level
+                return .handled
             }
-            return .handled
 
-        // ⇥ Tab — cycle to next folder
+        // ⇥ Tab — cycle through folders if at root level
         case Self.keyTab:
             guard !isSearching, !folders.isEmpty else { return .ignored }
-            selectedFolderIndex = (selectedFolderIndex + 1) % folders.count
-            selectedSnippetIndex = 0
-            return .handled
+            if activeFolder == nil {
+                selectedFolderIndex = (selectedFolderIndex + 1) % folders.count
+                return .handled
+            } else {
+                // Inside folder, tab switches to next folder directly
+                let nextIdx = (selectedFolderIndex + 1) % folders.count
+                openFolder(folders[nextIdx])
+                return .handled
+            }
 
-        // ↵ Return — insert snippet or open folder from search
+        // ↵ Return — Open folder (if at root) or insert snippet (if inside folder or search)
         case Self.keyReturn:
             if isSearching {
                 guard !searchResults.isEmpty else { return .handled }
@@ -190,14 +274,17 @@ public final class QuickSnippetsNavigationState: ObservableObject {
                     openFolder(folder)
                     return .handled
                 }
+            } else if activeFolder == nil {
+                openSelectedFolder()
+                return .handled
             } else {
-                let snippets = currentFolderSnippets
+                let snippets = currentSnippets
                 guard !snippets.isEmpty else { return .handled }
                 let idx = min(selectedSnippetIndex, snippets.count - 1)
                 return .insertSnippet(snippets[idx].content)
             }
 
-        // ⎋ Escape — clear search or close overlay
+        // ⎋ Escape — Clear search or close overlay
         case Self.keyEscape:
             if isSearching {
                 searchText = ""

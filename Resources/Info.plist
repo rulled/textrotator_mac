@@ -26,6 +26,8 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>NSSupportsAutomaticTermination</key>
+    <false/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Text Rotator. All rights reserved.</string>
     <key>NSAppleEventsUsageDescription</key>

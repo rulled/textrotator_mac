@@ -81,8 +81,10 @@ public final class SystemAccessibilityDriver: TextAccessibilityDriver, @unchecke
     }
 
     private func getFocusedUIElement() -> AXUIElement? {
+        guard AXIsProcessTrusted() else { return nil }
+
         let systemWide = AXUIElementCreateSystemWide()
-        var focusedAppRef: AnyObject?
+        var focusedAppRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             systemWide,
             kAXFocusedApplicationAttribute as CFString,
@@ -94,7 +96,7 @@ public final class SystemAccessibilityDriver: TextAccessibilityDriver, @unchecke
         }
 
         let appElement = focusedApp as! AXUIElement
-        var focusedElementRef: AnyObject?
+        var focusedElementRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             appElement,
             kAXFocusedUIElementAttribute as CFString,
@@ -113,7 +115,7 @@ public final class SystemAccessibilityDriver: TextAccessibilityDriver, @unchecke
             return nil
         }
 
-        var selectedTextRef: AnyObject?
+        var selectedTextRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             uiElement,
             kAXSelectedTextAttribute as CFString,
@@ -169,14 +171,15 @@ public final class SystemKeyEventSimulatorDriver: KeyEventSimulatorDriver, @unch
     public init() {}
 
     public func simulateKey(keyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
-        guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
             return false
         }
         keyDown.flags = flags
         keyUp.flags = flags
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        keyDown.post(tap: .cgSessionEventTap)
+        keyUp.post(tap: .cgSessionEventTap)
         return true
     }
 }
@@ -270,6 +273,9 @@ public final class TextIOService: TextIOServiceProtocol, @unchecked Sendable {
         // Level 2 (fallback): Concealed pasteboard write + Cmd+V simulation
         appActivationDriver.activateFrontmostAppIfNeeded()
 
+        let initialChangeCount = pasteboardDriver.changeCount()
+        let previousString = pasteboardDriver.string(forType: .string)
+
         _ = pasteboardDriver.clearContents()
         _ = pasteboardDriver.setString(text, forType: .string)
 
@@ -282,6 +288,17 @@ public final class TextIOService: TextIOServiceProtocol, @unchecked Sendable {
         let keySimulated = keyEventSimulator.simulateKey(keyCode: 0x09, flags: .maskCommand)
         guard keySimulated else {
             throw TextIOError.eventSimulationFailed
+        }
+
+        if let previousString {
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard let self else { return }
+                if self.pasteboardDriver.changeCount() == initialChangeCount + 1 {
+                    _ = self.pasteboardDriver.clearContents()
+                    _ = self.pasteboardDriver.setString(previousString, forType: .string)
+                }
+            }
         }
     }
 }

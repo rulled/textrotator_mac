@@ -44,6 +44,7 @@ public final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.isMovableByWindowBackground = true
         panel.delegate = self
         panel.animationBehavior = .utilityWindow
+        panel.isReleasedWhenClosed = false
     }
 
     public func setContent<Content: View>(view: Content, size: NSSize) {
@@ -115,6 +116,18 @@ public final class FloatingPanelController: NSObject, NSWindowDelegate {
             }
         }
     }
+    public func dismissImmediately() {
+        guard isVisible else { return }
+        isClosing = false
+        isPresenting = false
+        panel.onKeyDown = nil
+        panel.orderOut(nil)
+        panel.alphaValue = 1.0
+        let callback = onClose
+        onClose = nil
+        callback?()
+    }
+
 
     public func windowDidResignKey(_ notification: Notification) {
         guard !isPresenting, !isClosing, isVisible else { return }
