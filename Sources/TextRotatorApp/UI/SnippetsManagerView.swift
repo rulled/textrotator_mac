@@ -53,14 +53,23 @@ public struct SnippetsManagerView: View {
         .overlay {
             if isShowingSettings {
                 ZStack {
+                    // Plain content-area scrim (NO .ignoresSafeArea):
+                    // In macOS NavigationSplitView, the sidebar's titlebar is transparent
+                    // (its NSTitlebarBackgroundView is hidden) so the sidebar background extends to
+                    // the top edge. If we used .ignoresSafeArea(), SwiftUI would darken the top-left
+                    // under the traffic lights, and WindowManager's titlebarScrim would darken it AGAIN
+                    // (double scrim -> top-left darker than top-right).
+                    // Without .ignoresSafeArea(), SwiftUI darkens the content below the safe area (508pt),
+                    // and WindowManager.titlebarScrim darkens the titlebar (52pt). They meet seamlessly.
                     Color.black.opacity(0.35)
-                        .ignoresSafeArea()
                         .onTapGesture {
                             isShowingSettings = false
                         }
 
                     SettingsSheetView(coordinator: coordinator, isPresented: $isShowingSettings)
-                        .background(.ultraThinMaterial)
+                        // thinMaterial: adds luminous tint so the modal reads as bright
+                        // over the dark scrim behind it.
+                        .background(.thinMaterial)
                         .activeGlassAppearance()
                         .clipShape(RoundedRectangle(cornerRadius: AppTheme.panelRadius, style: .continuous))
                         .overlay(AppTheme.glassSpecularBorder(for: colorScheme))
@@ -70,6 +79,12 @@ public struct SnippetsManagerView: View {
             }
         }
         .animation(AppTheme.springFast, value: isShowingSettings)
+        .onChange(of: isShowingSettings) { _, shown in
+            WindowManager.shared.setTitlebarDimmed(shown)
+        }
+        .onDisappear {
+            WindowManager.shared.setTitlebarDimmed(false)
+        }
         .confirmationDialog(
             "Удалить папку «\(folderPendingDeletion?.name ?? "")»?",
             isPresented: Binding(
@@ -345,7 +360,7 @@ public struct SnippetsManagerView: View {
                         saveFolderName(folder: folder)
                     }
             }
-            .padding(.vertical, 2)
+            .frame(height: 28)
             .onAppear {
                 isFolderRenameFocused = true
             }
@@ -699,45 +714,49 @@ private struct FolderSidebarRowContent: View {
     @State private var isTrashHovered: Bool = false
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(alignment: .center, spacing: 4) {
             NavigationLink(value: folder.id) {
                 Label(folder.name, systemImage: "folder")
                     .font(.system(size: 13))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
 
             Spacer()
 
-            if isHovered {
-                HStack(spacing: 2) {
-                    Button(action: onRename) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 11.5, weight: .medium))
-                            .foregroundColor(isPencilHovered ? .primary : .secondary)
-                            .frame(width: 22, height: 22)
-                            .background(isPencilHovered ? Color.secondary.opacity(0.14) : Color.clear)
-                            .cornerRadius(5)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { isPencilHovered = $0 }
-                    .help("Переименовать папку")
-
-                    Button(role: .destructive, action: onDelete) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 11.5, weight: .medium))
-                            .foregroundColor(isTrashHovered ? .red : .red.opacity(0.85))
-                            .frame(width: 22, height: 22)
-                            .background(isTrashHovered ? Color.red.opacity(0.14) : Color.clear)
-                            .cornerRadius(5)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { isTrashHovered = $0 }
-                    .help("Удалить папку...")
+            HStack(spacing: 2) {
+                Button(action: onRename) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundColor(isPencilHovered ? .primary : .secondary)
+                        .frame(width: 22, height: 22)
+                        .background(isPencilHovered ? Color.secondary.opacity(0.14) : Color.clear)
+                        .cornerRadius(5)
+                        .contentShape(Rectangle())
                 }
-                .transition(.opacity)
+                .buttonStyle(.plain)
+                .onHover { isPencilHovered = $0 }
+                .help("Переименовать папку")
+
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundColor(isTrashHovered ? .red : .red.opacity(0.85))
+                        .frame(width: 22, height: 22)
+                        .background(isTrashHovered ? Color.red.opacity(0.14) : Color.clear)
+                        .cornerRadius(5)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { isTrashHovered = $0 }
+                .help("Удалить папку...")
             }
+            .opacity(isHovered ? 1.0 : 0.0)
+            .allowsHitTesting(isHovered)
+            .animation(AppTheme.springFast, value: isHovered)
         }
+        .frame(height: 28)
+        .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .contextMenu {
             Button("Переименовать...") {
