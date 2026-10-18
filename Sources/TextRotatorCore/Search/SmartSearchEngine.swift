@@ -83,10 +83,39 @@ public struct SmartSearchEngine: Sendable {
     /// - Replaces 'ё' with 'е'
     /// - Trims whitespaces
     public static func normalize(_ text: String) -> String {
-        return text
-            .lowercased()
-            .replacingOccurrences(of: "ё", with: "е")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        normalizeCache.normalized(text)
+    }
+
+    /// Cache for expensive normalize() calls. Search rebuilds run on every keystroke
+    /// over the same corpus; caching keeps large libraries (4000+ texts) responsive.
+    private static let normalizeCache = NormalizeCache()
+
+    private final class NormalizeCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [String: String] = [:]
+        private let capacity = 16_384
+
+        func normalized(_ raw: String) -> String {
+            lock.lock()
+            if let hit = storage[raw] {
+                lock.unlock()
+                return hit
+            }
+            lock.unlock()
+
+            let value = raw
+                .lowercased()
+                .replacingOccurrences(of: "ё", with: "е")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            lock.lock()
+            if storage.count >= capacity {
+                storage.removeAll(keepingCapacity: true)
+            }
+            storage[raw] = value
+            lock.unlock()
+            return value
+        }
     }
 
     // MARK: - Core Matching & Scoring
@@ -102,8 +131,16 @@ public struct SmartSearchEngine: Sendable {
         // Test with original query
         let score1 = scoreSingleQuery(normQuery: normQuery, normCandidate: normCandidate)
 
-        // Test with keyboard inverted query
-        let invertedQuery = normalize(invertKeyboardLayout(query))
+        // Test with keyboard inverted query.
+        // Single-character queries are skipped: inversion turns them into a different
+        // letter which matches unrelated content (e.g. "п"→"g" matches every English
+        // text), flooding results with noise after erasing a longer query.
+        let invertedQuery: String
+        if normQuery.count >= 2 {
+            invertedQuery = normalize(invertKeyboardLayout(query))
+        } else {
+            invertedQuery = normQuery
+        }
         let score2: Double
         if invertedQuery != normQuery {
             score2 = scoreSingleQuery(normQuery: invertedQuery, normCandidate: normCandidate)
@@ -146,8 +183,10 @@ public struct SmartSearchEngine: Sendable {
             return max(score, 250.0)
         }
 
-        // 5. fzy Fuzzy Subsequence Match
-        if let fzyScore = calculateFzyScore(query: normQuery, candidate: normCandidate) {
+        // 5. fzy Fuzzy Subsequence Match.
+        // Single-char queries: substring search (step 4) already found every candidate
+        // containing the char; running fzy would only add distant, irrelevant matches.
+        if normQuery.count >= 2, let fzyScore = calculateFzyScore(query: normQuery, candidate: normCandidate) {
             return fzyScore
         }
 
