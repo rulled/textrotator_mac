@@ -9,6 +9,9 @@ public struct SettingsSheetView: View {
     @State private var recordingAction: HotkeyAction? = nil
     @State private var localKeyMonitor: Any? = nil
     @State private var isCloseHovered: Bool = false
+    @State private var isImportPickerPresented: Bool = false
+    @State private var configMessage: String? = nil
+    @State private var configMessageIsError: Bool = false
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var updater = UpdateService.shared
 
@@ -23,6 +26,7 @@ public struct SettingsSheetView: View {
                 accessibilitySection
                 hotkeysSection
                 translationSection
+                configSection
                 updatesSection
             }
             .padding(24)
@@ -341,6 +345,132 @@ public struct SettingsSheetView: View {
                 RoundedRectangle(cornerRadius: AppTheme.cardRadius, style: .continuous)
                     .stroke(Color.secondary.opacity(0.12), lineWidth: 0.5)
             )
+        }
+    }
+
+    // MARK: - Config Import / Export Section
+
+    private var configSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Импорт и экспорт конфигурации", systemImage: "externaldrive.fill.badge.arrow.up.arrow.down")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.primary)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Резервная копия")
+                            .font(.system(size: 12.5, weight: .medium))
+                        Text("Полная совместимость с оригинальным TextRotator для Windows: папки, тексты, горячие клавиши и настройки.")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer()
+                }
+
+                HStack(spacing: 8) {
+                    Button {
+                        exportConfig()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Экспорт")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .help("Сохранить бэкап в файл JSON")
+
+                    Button {
+                        isImportPickerPresented = true
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "square.and.arrow.down")
+                            Text("Импорт")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Загрузить бэкап из файла JSON (заменит текущие папки)")
+                }
+
+                if let message = configMessage {
+                    HStack(spacing: 6) {
+                        Image(systemName: configMessageIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                            .foregroundColor(configMessageIsError ? .orange : .green)
+                        Text(message)
+                            .font(.system(size: 10.5))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color.secondary.opacity(0.06))
+            .cornerRadius(AppTheme.cardRadius)
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.cardRadius, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.12), lineWidth: 0.5)
+            )
+        }
+        .fileImporter(
+            isPresented: $isImportPickerPresented,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    importConfig(from: url)
+                }
+            case .failure(let error):
+                setConfigMessage("Ошибка выбора файла: \(error.localizedDescription)", isError: true)
+            }
+        }
+    }
+
+    private func exportConfig() {
+        do {
+            let data = try coordinator.exportConfiguration()
+
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.json]
+            panel.nameFieldStringValue = "text_rotator_backup.json"
+            panel.message = "Резервная копия TextRotator"
+            panel.canCreateDirectories = true
+
+            if panel.runModal() == .OK, let url = panel.url {
+                try data.write(to: url, options: .atomic)
+                let folders = coordinator.folders
+                let snippetCount = folders.reduce(0) { $0 + $1.snippets.count }
+                setConfigMessage("Экспортировано: \(folders.count) папок, \(snippetCount) текстов → \(url.lastPathComponent)", isError: false)
+                AppTheme.hapticSuccess()
+            }
+        } catch {
+            setConfigMessage("Ошибка экспорта: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    private func importConfig(from url: URL) {
+        do {
+            let data = try Data(contentsOf: url)
+            let result = try coordinator.importConfiguration(data: data, replaceExisting: true)
+            setConfigMessage(
+                "Импортировано: \(result.foldersImported) папок, \(result.snippetsImported) текстов, \(result.hotkeysImported) хоткеев, \(result.settingsImported) настроек",
+                isError: false
+            )
+            AppTheme.hapticSuccess()
+        } catch {
+            setConfigMessage("Ошибка импорта: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    private func setConfigMessage(_ text: String, isError: Bool) {
+        withAnimation(AppTheme.springFast) {
+            configMessage = text
+            configMessageIsError = isError
         }
     }
 

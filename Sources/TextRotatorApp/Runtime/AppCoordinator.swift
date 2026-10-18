@@ -11,6 +11,7 @@ public final class AppCoordinator: ObservableObject {
     public let translationRouter: TranslationRouterProtocol
     public let textIO: TextIOServiceProtocol
     public let hotkeyService: HotkeyService
+    public let backupService = BackupService()
 
     // Active overlays
     public var quickSnippetsPanel: FloatingPanelController?
@@ -57,9 +58,11 @@ public final class AppCoordinator: ObservableObject {
 
         setupHotkeys()
         reloadDatabaseData()
-        seedInitialDataIfNeeded()
         restoreCursorTranslateState()
-
+        // Prompt accessibility on startup if not yet granted so app appears in System Settings
+        if !textIO.isAccessibilityGranted() {
+            textIO.promptAccessibilityPermission()
+        }
         // Background update check after launch
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -404,43 +407,156 @@ public final class AppCoordinator: ObservableObject {
         }
     }
 
-    private static let seedKey = "com.textrotator.has_seeded_initial_data"
+    // MARK: - Config Import / Export (TextRotator cross-compatible)
 
-    private func seedInitialDataIfNeeded() {
-        guard !UserDefaults.standard.bool(forKey: Self.seedKey) else { return }
-        do {
-            let f1 = try database.createFolder(name: "Клиентская поддержка")
-            _ = try database.createSnippet(folderId: f1.id, content: "Здравствуйте! Чем я могу вам помочь?")
-            _ = try database.createSnippet(folderId: f1.id, content: "Спасибо за ожидание! Ваш запрос передан техническому специалисту, ответим в течение 15 минут.")
-            _ = try database.createSnippet(folderId: f1.id, content: "Уточните, пожалуйста, номер вашего заказа или привязанный номер телефона.")
-            _ = try database.createSnippet(folderId: f1.id, content: "Проблема устранена! Пожалуйста, проверьте работу сервиса и сообщите нам.")
-            _ = try database.createSnippet(folderId: f1.id, content: "Благодарим за обращение! Если у вас появятся дополнительные вопросы — пишите, мы всегда на связи.")
+    /// Mapping between original app hotkey names and our actions.
+    private static let backupHotkeyActions: [String: HotkeyAction] = [
+        "hotkey.rotation": .quickSnippetsOverlay,
+        "hotkey.translate": .translatorOverlay,
+        "hotkey.instant_translate": .instantTranslateAndReplace,
+        "hotkey.cursor_translate": .cursorTranslateToggle
+    ]
 
-            let f2 = try database.createFolder(name: "Оплата и счета")
-            _ = try database.createSnippet(folderId: f2.id, content: "Мы предоставляем 100% гарантию возврата средств в течение 14 дней с момента покупки.")
-            _ = try database.createSnippet(folderId: f2.id, content: "Ссылка на оплату сформирована и направлена в ваш личный кабинет.")
-            _ = try database.createSnippet(folderId: f2.id, content: "Реквизиты для оплаты: ООО «Текст Ротатор», ИНН 7701234567, р/с 40702810900000012345.")
-            _ = try database.createSnippet(folderId: f2.id, content: "Мы принимаем карты МИР, Visa, MasterCard, а также оплату через СБП без комиссии 0%.")
-            _ = try database.createSnippet(folderId: f2.id, content: "Чек и закрывающие документы доступны для скачивания в формате PDF в профиле.")
+    /// Export the full configuration in the original TextRotator backup format.
+    public func exportConfiguration() throws -> Data {
+        var folderPayloads: [ImportFolderPayload] = []
+        for folder in try database.listFoldersWithSnippets() {
+            folderPayloads.append(ImportFolderPayload(
+                name: folder.name,
+                snippets: folder.snippets.map(\.content)
+            ))
+        }
 
-            let f3 = try database.createFolder(name: "English Support")
-            _ = try database.createSnippet(folderId: f3.id, content: "Hello! How can I assist you today?")
-            _ = try database.createSnippet(folderId: f3.id, content: "Thank you for reaching out! We are currently investigating this issue and will update you shortly.")
-            _ = try database.createSnippet(folderId: f3.id, content: "Could you please provide your order ID or account email address?")
-            _ = try database.createSnippet(folderId: f3.id, content: "We have issued a 100% refund for your purchase. It should appear in your account within 3-5 business days.")
-            _ = try database.createSnippet(folderId: f3.id, content: "Everything is sorted out! Feel free to contact us if you need any further assistance.")
+        let hotkeys = BackupHotkeys(
+            rotation: exportHotkeyString(for: .quickSnippetsOverlay),
+            translation: exportHotkeyString(for: .translatorOverlay),
+            instant: exportHotkeyString(for: .instantTranslateAndReplace),
+            cursor: exportHotkeyString(for: .cursorTranslateToggle)
+        )
 
-            let f4 = try database.createFolder(name: "Код и скрипты")
-            _ = try database.createSnippet(folderId: f4.id, content: "git add . && git commit -m \"feat: update search engine\" && git push origin main")
-            _ = try database.createSnippet(folderId: f4.id, content: "curl -X POST https://api.textrotator.app/v1/translate -H \"Content-Type: application/json\"")
-            _ = try database.createSnippet(folderId: f4.id, content: "docker compose up -d --build && docker compose logs -f")
-            _ = try database.createSnippet(folderId: f4.id, content: "npm run build && npm run test:coverage")
-            _ = try database.createSnippet(folderId: f4.id, content: "// TODO: optimize database indexes for FTS5 full-text query")
+        var settings: [String: String] = [:]
+        settings["provider.primary"] = activeProviderName
+        settings["cursor.translate_mode.enabled"] = isCursorTranslateEnabled ? "1" : "0"
+        settings["theme.active"] = colorSchemeSettingValue()
 
-            UserDefaults.standard.set(true, forKey: Self.seedKey)
-            reloadDatabaseData()
-        } catch {
-            print("Failed to seed database: \(error)")
+        let backup = backupService.makeBackup(
+            folders: folderPayloads,
+            hotkeys: hotkeys,
+            settings: settings
+        )
+        return try backupService.encode(backup)
+    }
+
+    /// Human-readable hotkey string ("F3", "Cmd+Shift+V", "Alt+Comma") matching
+    /// the original application's notation (written by its settings UI).
+    private func exportHotkeyString(for action: HotkeyAction) -> String {
+        let combo = currentKeyCombo(for: action)
+        var parts: [String] = []
+        if combo.modifiers.contains(.command) { parts.append("Cmd") }
+        if combo.modifiers.contains(.option) { parts.append("Alt") }
+        if combo.modifiers.contains(.shift) { parts.append("Shift") }
+        if combo.modifiers.contains(.control) { parts.append("Ctrl") }
+
+        let keyName = KeyCode.name(for: combo.keyCode)
+        // Original app writes plain "F3"; punctuation names need single-char form.
+        let normalizedKey: String
+        switch keyName {
+        case "Space": normalizedKey = "Space"
+        case "Return": normalizedKey = "Enter"
+        case "Esc": normalizedKey = "Escape"
+        default: normalizedKey = keyName
+        }
+        parts.append(normalizedKey)
+        return parts.joined(separator: "+")
+    }
+
+    /// Import a backup produced by the original app or by TextRotator macOS.
+    /// - Parameters:
+    ///   - data: raw JSON bytes.
+    ///   - replaceExisting: when true (default) the folders store is wiped before import.
+    /// - Returns: summary of what was imported.
+    @discardableResult
+    public func importConfiguration(data: Data, replaceExisting: Bool = true) throws -> ImportResult {
+        let parsed = try backupService.parse(data: data)
+
+        var foldersImported = 0
+        var snippetsImported = 0
+
+        if replaceExisting {
+            for folder in try database.listFoldersWithSnippets() {
+                try database.deleteFolder(id: folder.id)
+            }
+        }
+
+        for payload in parsed.folders {
+            let folder = try database.createFolder(name: payload.name)
+            foldersImported += 1
+            for snippet in payload.snippets {
+                _ = try database.createSnippet(folderId: folder.id, content: snippet)
+                snippetsImported += 1
+            }
+        }
+        reloadDatabaseData()
+
+        // Hotkeys: original stores "F3" / "Alt+Comma" style strings.
+        var hotkeysImported = 0
+        if let hk = parsed.hotkeys {
+            let pairs: [(String?, HotkeyAction)] = [
+                (hk.rotation, .quickSnippetsOverlay),
+                (hk.translation, .translatorOverlay),
+                (hk.instant, .instantTranslateAndReplace),
+                (hk.cursor, .cursorTranslateToggle)
+            ]
+            for (value, action) in pairs {
+                guard let value, !value.isEmpty else { continue }
+                if let combo = KeyCombo(string: value) {
+                    try? hotkeyService.register(action: action, combo: combo)
+                    UserDefaults.standard.set(Int(combo.keyCode), forKey: "hotkey_code_\(action.rawValue)")
+                    UserDefaults.standard.set(Int(combo.modifiers.rawValue), forKey: "hotkey_mods_\(action.rawValue)")
+                    UserDefaults.standard.set(combo.displayString, forKey: "hotkey_\(action.rawValue)")
+                    hotkeysImported += 1
+                }
+            }
+            objectWillChange.send()
+        }
+
+        // Settings: apply the subset we natively support.
+        var settingsApplied = 0
+        if let settings = parsed.settings {
+            // Primary provider
+            if let primary = settings["provider.primary"],
+               primary == "Yandex" || primary == "Google" {
+                activeProviderName = primary
+                settingsApplied += 1
+            }
+
+            // Cursor translate mode
+            if let enabled = settings["cursor.translate_mode.enabled"] {
+                let target: Bool
+                switch enabled {
+                case "1", "true", "yes": target = true
+                case "0", "false", "no": target = false
+                default: target = isCursorTranslateEnabled
+                }
+                if target != isCursorTranslateEnabled {
+                    toggleCursorTranslateMode(showFeedback: false)
+                }
+                settingsApplied += 1
+            }
+        }
+
+        return ImportResult(
+            foldersImported: foldersImported,
+            snippetsImported: snippetsImported,
+            hotkeysImported: hotkeysImported,
+            settingsImported: settingsApplied
+        )
+    }
+
+    private func colorSchemeSettingValue() -> String {
+        switch NSApp.effectiveAppearance.bestMatch(from: [.aqua, .vibrantDark]) {
+        case .aqua: return "light"
+        default: return "dark"
         }
     }
 }
