@@ -40,7 +40,7 @@ struct TextRotatorApp {
 
         let coordinator = AppCoordinator.shared
         let statusBar = StatusBarController(coordinator: coordinator)
-        _ = statusBar
+        coordinator.statusBar = statusBar
 
         if args.contains("--quick") {
             await coordinator.toggleQuickSnippetsOverlay()

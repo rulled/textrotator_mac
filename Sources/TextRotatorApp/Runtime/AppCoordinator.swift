@@ -13,6 +13,8 @@ public final class AppCoordinator: ObservableObject {
     public let hotkeyService: HotkeyService
     public let backupService = BackupService()
 
+    // Status bar controller (strongly referenced for daemon lifecycle)
+    public var statusBar: StatusBarController?
     // Active overlays
     public var quickSnippetsPanel: FloatingPanelController?
     public var translatorPanel: FloatingPanelController?

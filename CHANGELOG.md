@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-10-18
+
+### Fixed / Исправления
+- **Интерактивность меню статус-бара**: устранена деаллокация `StatusBarController` при чистом фоновом запуске без открытых окон (все пункты меню в Menu Bar становились серыми и недоступными).
+- **Прямое обновление состояния меню**: исключено деструктивное пересоздание `NSMenu` внутри делегата `menuWillOpen`, что нарушало цикл обработки событий AppKit.
+
 ## [1.0.2] - 2026-10-18
 
 ### Added / Новые возможности
@@ -52,7 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Слежение за курсором и выделением**: умный перехват активного фрагмента текста через Accessibility API.
 - **Меню статус-бара**: легковесный агент в Menu Bar macOS (LSUIElement) с быстрым доступом ко всем функциям.
 
-[Unreleased]: https://github.com/rulled/textrotator_mac/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/rulled/textrotator_mac/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/rulled/textrotator_mac/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/rulled/textrotator_mac/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/rulled/textrotator_mac/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/rulled/textrotator_mac/releases/tag/v1.0.0

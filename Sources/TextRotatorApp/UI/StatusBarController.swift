@@ -3,13 +3,16 @@ import AppKit
 import SwiftUI
 
 @MainActor
-public final class StatusBarController: NSObject, NSMenuDelegate {
+public final class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
+    public static var shared: StatusBarController?
     private var statusItem: NSStatusItem?
+    private var cursorTranslateItem: NSMenuItem?
     private let coordinator: AppCoordinator
 
     public init(coordinator: AppCoordinator) {
         self.coordinator = coordinator
         super.init()
+        StatusBarController.shared = self
         setupStatusItem()
     }
 
@@ -31,6 +34,7 @@ public final class StatusBarController: NSObject, NSMenuDelegate {
     public func buildMenu() {
         let menu = NSMenu()
         menu.delegate = self
+        menu.autoenablesItems = false
 
         // 1. Open Window / Manager
         let managerItem = NSMenuItem(
@@ -39,20 +43,23 @@ public final class StatusBarController: NSObject, NSMenuDelegate {
             keyEquivalent: ","
         )
         managerItem.target = self
+        managerItem.isEnabled = true
         menu.addItem(managerItem)
 
         menu.addItem(NSMenuItem.separator())
 
         // 2. Cursor Translate Toggle
         let hotkey = coordinator.currentKeyCombo(for: .cursorTranslateToggle).displayString
-        let cursorTranslateItem = NSMenuItem(
+        let cursorItem = NSMenuItem(
             title: "Автоперевод при выделении (\(hotkey))",
             action: #selector(toggleCursorTranslate),
             keyEquivalent: ""
         )
-        cursorTranslateItem.target = self
-        cursorTranslateItem.state = coordinator.isCursorTranslateEnabled ? .on : .off
-        menu.addItem(cursorTranslateItem)
+        cursorItem.target = self
+        cursorItem.state = coordinator.isCursorTranslateEnabled ? .on : .off
+        cursorItem.isEnabled = true
+        menu.addItem(cursorItem)
+        self.cursorTranslateItem = cursorItem
 
         menu.addItem(NSMenuItem.separator())
 
@@ -63,6 +70,7 @@ public final class StatusBarController: NSObject, NSMenuDelegate {
             keyEquivalent: ""
         )
         updateItem.target = self
+        updateItem.isEnabled = true
         menu.addItem(updateItem)
 
         menu.addItem(NSMenuItem.separator())
@@ -74,14 +82,21 @@ public final class StatusBarController: NSObject, NSMenuDelegate {
             keyEquivalent: "q"
         )
         quitItem.target = self
+        quitItem.isEnabled = true
         menu.addItem(quitItem)
 
         statusItem?.menu = menu
     }
 
     public func menuWillOpen(_ menu: NSMenu) {
-        // Refresh checkmark state when user clicks the menu item
-        buildMenu()
+        // Update item states directly without replacing statusItem.menu mid-flight
+        let hotkey = coordinator.currentKeyCombo(for: .cursorTranslateToggle).displayString
+        cursorTranslateItem?.title = "Автоперевод при выделении (\(hotkey))"
+        cursorTranslateItem?.state = coordinator.isCursorTranslateEnabled ? .on : .off
+    }
+
+    public func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        return true
     }
 
     @objc private func openManagerWindow() {
